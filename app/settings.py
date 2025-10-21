@@ -12,10 +12,18 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 
 import os
 from pathlib import Path
-
+from dotenv import load_dotenv; load_dotenv()
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Cargar variables de entorno
+# Buscar archivos .env en el directorio base
+env_file = BASE_DIR / '.env.development'  # Para desarrollo
+if not env_file.exists():
+    env_file = BASE_DIR / '.env'  # Fallback
+if env_file.exists():
+    load_dotenv(env_file)
 
 
 # Quick-start development settings - unsuitable for production
@@ -61,6 +69,7 @@ TEMPLATES = [
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
+                'django.template.context_processors.debug',
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
@@ -81,7 +90,11 @@ DATABASES = {
         'HOST': os.environ.get('DB_HOST'),
         'NAME': os.environ.get('DB_NAME'),
         'USER': os.environ.get('DB_USER'),
-        'PASSWORD': os.environ.get('DB_PASS'),
+        'PASSWORD': os.environ.get('DB_PASSWORD'),
+        'PORT': os.environ.get('DB_PORT', '5432'),
+        'OPTIONS': {
+            'sslmode': os.environ.get('DB_SSLMODE', 'require'),
+        }
     }
 }
 
