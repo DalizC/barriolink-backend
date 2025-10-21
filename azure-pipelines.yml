@@ -26,8 +26,8 @@ steps:
     $ErrorActionPreference = 'Stop'
     Set-StrictMode -Version Latest
 
-    $ref     = $env:BUILD_SOURCEBRANCH        # refs/heads/feature/x  |  refs/tags/v1.2.3
-    $refName = $env:BUILD_SOURCEBRANCHNAME    # feature/x             |  v1.2.3
+    $ref     = $env:BUILD_SOURCEBRANCH
+    $refName = $env:BUILD_SOURCEBRANCHNAME
     $isTag   = $ref.StartsWith('refs/tags/')
     $isBranch= $ref.StartsWith('refs/heads/')
 
@@ -36,7 +36,10 @@ steps:
     git config user.email "ci-mirror@example.com"
     git config --global credential.helper ""
 
-    git remote remove github 2>$null
+    # Eliminar remoto 'github' solo si existe (evita fallo)
+    $hasGithub = git remote | Select-String -Pattern '^github$' -Quiet
+    if ($hasGithub) { git remote remove github }
+
     $remote = "https://$(GITHUB_USER):$(GITHUB_PAT)@github.com/$(GITHUB_OWNER)/$(GITHUB_REPO).git"
     git remote add github $remote
     git remote -v
@@ -48,7 +51,6 @@ steps:
       git push github HEAD:refs/heads/$refName
       if ($LASTEXITCODE -ne 0) { throw "Push a rama '$refName' falló. ¿Historia divergente o branch protection?" }
 
-      # (Opcional) si quieres tags asociados:
       git push github --tags
       if ($LASTEXITCODE -ne 0) { throw "Push de tags falló." }
 
@@ -61,13 +63,9 @@ steps:
     }
     elseif ($isTag) {
       Write-Host "== Sincronizando tag '$refName' a GitHub"
-      # ✅ cualquiera de las dos funciona; deja UNA:
       git push github "refs/tags/$refName"
-      # git push github "refs/tags/$refName:refs/tags/$refName"
-
       if ($LASTEXITCODE -ne 0) { throw "Push del tag '$refName' falló." }
 
-      # Verificación: el tag ahora debe existir en remoto
       $remoteTag = (git ls-remote --tags github "refs/tags/$refName" | ForEach-Object { $_.Split("`t")[0] })
       if (-not $remoteTag) { throw "El tag '$refName' no quedó en GitHub tras el push." }
       Write-Host "OK: tag '$refName' sincronizado."
