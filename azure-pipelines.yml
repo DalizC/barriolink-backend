@@ -24,54 +24,52 @@ steps:
 
 - powershell: |
     $ErrorActionPreference = 'Stop'
+    Set-StrictMode -Version Latest
 
-    # --- Identificar qué disparó el build
-    $ref        = $env:BUILD_SOURCEBRANCH        # p.ej. refs/heads/feature/x o refs/tags/v1.2.3
-    $refName    = $env:BUILD_SOURCEBRANCHNAME    # p.ej. feature/x o v1.2.3
-    $isTag      = $ref.StartsWith('refs/tags/')
-    $isBranch   = $ref.StartsWith('refs/heads/')
+    $ref     = $env:BUILD_SOURCEBRANCH        # refs/heads/feature/x  |  refs/tags/v1.2.3
+    $refName = $env:BUILD_SOURCEBRANCHNAME    # feature/x             |  v1.2.3
+    $isTag   = $ref.StartsWith('refs/tags/')
+    $isBranch= $ref.StartsWith('refs/heads/')
 
     git --version
     git config user.name  "ci-mirror"
     git config user.email "ci-mirror@example.com"
-    # Evitar choques con helpers del agente
     git config --global credential.helper ""
 
-    # Remoto efímero a GitHub con PAT (Azure enmascara secretos en logs)
     git remote remove github 2>$null
     $remote = "https://$(GITHUB_USER):$(GITHUB_PAT)@github.com/$(GITHUB_OWNER)/$(GITHUB_REPO).git"
     git remote add github $remote
+    git remote -v
 
     git fetch --all --tags
 
     if ($isBranch) {
       Write-Host "== Sincronizando rama '$refName' a GitHub (sin force)"
-      # Empujar el commit actual (HEAD) a la rama correspondiente en GitHub
       git push github HEAD:refs/heads/$refName
-      if ($LASTEXITCODE -ne 0) {
-        throw "Push a rama '$refName' falló. ¿Historia divergente o branch protection?"
-      }
+      if ($LASTEXITCODE -ne 0) { throw "Push a rama '$refName' falló. ¿Historia divergente o branch protection?" }
 
-      # Enviar tags (no-forzado); útil si haces releases desde esta rama
+      # (Opcional) si quieres tags asociados:
       git push github --tags
-      if ($LASTEXITCODE -ne 0) {
-        throw "Push de tags falló."
-      }
+      if ($LASTEXITCODE -ne 0) { throw "Push de tags falló." }
 
-      # Verificación: comparar SHAs local vs remoto
       $localSha  = (git rev-parse HEAD)
       $remoteSha = (git ls-remote github "refs/heads/$refName" | ForEach-Object { $_.Split("`t")[0] })
       Write-Host "Local:  $localSha"
       Write-Host "Remote: $remoteSha"
-      if (-not $remoteSha -or $remoteSha -ne $localSha) {
-        throw "El commit remoto no coincide con el local tras el push."
-      }
+      if (-not $remoteSha -or $remoteSha -ne $localSha) { throw "El commit remoto no coincide tras el push." }
       Write-Host "OK: rama '$refName' sincronizada."
     }
     elseif ($isTag) {
       Write-Host "== Sincronizando tag '$refName' a GitHub"
-      git push github $ref:$ref
+      # ✅ cualquiera de las dos funciona; deja UNA:
+      git push github "refs/tags/$refName"
+      # git push github "refs/tags/$refName:refs/tags/$refName"
+
       if ($LASTEXITCODE -ne 0) { throw "Push del tag '$refName' falló." }
+
+      # Verificación: el tag ahora debe existir en remoto
+      $remoteTag = (git ls-remote --tags github "refs/tags/$refName" | ForEach-Object { $_.Split("`t")[0] })
+      if (-not $remoteTag) { throw "El tag '$refName' no quedó en GitHub tras el push." }
       Write-Host "OK: tag '$refName' sincronizado."
     }
     else {
