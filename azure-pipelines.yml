@@ -6,71 +6,31 @@
 # Azure Repos -> GitHub sync, por rama que dispara el build (sin force)
 trigger:
   branches:
-    include: [ main, develop, release/*, feature/* ]
-  tags:
-    include: [ 'v*' ]
-pr: none
+    include: [ main, develop, release/* ]
+pr:
+  branches:
+    include: [ main, develop]
 
-pool:
-  name: home-office   # tu agente self-hosted
-
-variables:
-  GITHUB_OWNER: $(GITHUB_USER)
-  GITHUB_REPO: barriolink-backend
+pool: 
+  name: home-office
 
 steps:
-- checkout: self
-  fetchDepth: 0
+  - checkout: self
+    fetchDepth: 0
 
-- powershell: |
-    $ErrorActionPreference = 'Stop'
-    Set-StrictMode -Version Latest
+  - powershell: |
+      $ErrorActionPreference = 'Stop'
+      git config user.name "Azure DevOps"
+      git config user.email "build@azuredevops.local"
 
-    $ref     = $env:BUILD_SOURCEBRANCH
-    $refName = $env:BUILD_SOURCEBRANCHNAME
-    $isTag   = $ref.StartsWith('refs/tags/')
-    $isBranch= $ref.StartsWith('refs/heads/')
+      $remoteUrl = "https://$(GITHUB_USER):$(GITHUB_PAT)@github.com/$(GITHUB_OWNER)/$(GITHUB_REPO).git"
 
-    git --version
-    git config user.name  "ci-mirror"
-    git config user.email "ci-mirror@example.com"
-    git config --global credential.helper ""
+      git remote set-url github $remoteUrl 2>$null
+      if ($LASTEXITCODE -ne 0) {
+        git remote add github $remoteUrl
+      }
 
-    # Eliminar remoto 'github' solo si existe (evita fallo)
-    $hasGithub = git remote | Select-String -Pattern '^github$' -Quiet
-    if ($hasGithub) { git remote remove github }
-
-    $remote = "https://$(GITHUB_USER):$(GITHUB_PAT)@github.com/$(GITHUB_OWNER)/$(GITHUB_REPO).git"
-    git remote add github $remote
-    git remote -v
-
-    git fetch --all --tags
-
-    if ($isBranch) {
-      Write-Host "== Sincronizando rama '$refName' a GitHub (sin force)"
-      git push github HEAD:refs/heads/$refName
-      if ($LASTEXITCODE -ne 0) { throw "Push a rama '$refName' falló. ¿Historia divergente o branch protection?" }
-
-      git push github --tags
-      if ($LASTEXITCODE -ne 0) { throw "Push de tags falló." }
-
-      $localSha  = (git rev-parse HEAD)
-      $remoteSha = (git ls-remote github "refs/heads/$refName" | ForEach-Object { $_.Split("`t")[0] })
-      Write-Host "Local:  $localSha"
-      Write-Host "Remote: $remoteSha"
-      if (-not $remoteSha -or $remoteSha -ne $localSha) { throw "El commit remoto no coincide tras el push." }
-      Write-Host "OK: rama '$refName' sincronizada."
-    }
-    elseif ($isTag) {
-      Write-Host "== Sincronizando tag '$refName' a GitHub"
-      git push github "refs/tags/$refName"
-      if ($LASTEXITCODE -ne 0) { throw "Push del tag '$refName' falló." }
-
-      $remoteTag = (git ls-remote --tags github "refs/tags/$refName" | ForEach-Object { $_.Split("`t")[0] })
-      if (-not $remoteTag) { throw "El tag '$refName' no quedó en GitHub tras el push." }
-      Write-Host "OK: tag '$refName' sincronizado."
-    }
-    else {
-      throw "Tipo de ref no soportado: $ref"
-    }
-  displayName: 'Sync Azure → GitHub (rama actual + tags)'
+      $branch = "$(Build.SourceBranchName)"
+      Write-Host "Pushing branch $branch to $(GITHUB_REPO)..."
+      git push github "HEAD:refs/heads/$branch" --force-with-lease
+    displayName: 'Mirror to GitHub'
