@@ -88,33 +88,47 @@ stages:
       displayName: 'Checkout with full history'
 
     - powershell: |
-        $ErrorActionPreference = 'Stop'
+        $ErrorActionPreference = 'Continue'  # Cambiado para manejar errores manualmente
         
         Write-Host "Configurando Git..."
         git config user.name "Azure DevOps Mirror"
         git config user.email "azuredevops-mirror@barriolink.com"
         git config core.autocrlf false
+        git config push.default current
         
         Write-Host "Información del repositorio:"
         git log --oneline -5
+        Write-Host "Rama actual: $(git branch --show-current)"
+        Write-Host "Ramas disponibles:"
+        git branch -a
         
         Write-Host "Configurando remote GitHub..."
         $remoteUrl = "https://$(GITHUB_USER):$(GITHUB_PAT)@github.com/$(GITHUB_OWNER)/$(GITHUB_REPO).git"
         
-        # Verificar si el remote ya existe
-        $existingRemote = git remote get-url github 2>$null
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host "Actualizando remote existente..."
+        # Verificar remotes existentes
+        Write-Host "Remotes actuales:"
+        git remote -v
+        
+        # Verificar si el remote github ya existe (manejo de errores manual)
+        git remote get-url github 2>$null
+        $remoteExists = $LASTEXITCODE -eq 0
+        
+        if ($remoteExists) {
+            Write-Host "Remote 'github' ya existe, actualizando URL..."
             git remote set-url github $remoteUrl
         } else {
-            Write-Host "Agregando nuevo remote..."
+            Write-Host "Agregando nuevo remote 'github'..."
             git remote add github $remoteUrl
         }
         
+        Write-Host "Remotes después de configuración:"
+        git remote -v
+        
         Write-Host "Verificando conectividad con GitHub..."
-        git ls-remote github HEAD > $null
+        git ls-remote github HEAD 2>&1
         if ($LASTEXITCODE -ne 0) {
-            Write-Error "No se puede conectar a GitHub. Verificar credenciales."
+            Write-Error "No se puede conectar a GitHub. Verificar credenciales y configuración."
+            Write-Host "Debugging: Verificar GITHUB_USER, GITHUB_PAT, GITHUB_OWNER, GITHUB_REPO"
             exit 1
         }
         Write-Host "Conexión a GitHub exitosa"
@@ -127,7 +141,7 @@ stages:
         GITHUB_REPO: $(GITHUB_REPO)
 
     - powershell: |
-        $ErrorActionPreference = 'Stop'
+        $ErrorActionPreference = 'Continue'  # Manejo manual de errores
         $branch = "$(Build.SourceBranchName)"
         $maxRetries = $(maxRetries)
         $retryCount = 0
@@ -136,22 +150,66 @@ stages:
         Write-Host "Iniciando mirror de la rama: $branch"
         Write-Host "Target: $(GITHUB_OWNER)/$(GITHUB_REPO)"
         
+        # Verificar estado actual del repositorio
+        Write-Host "Estado actual del repositorio:"
+        Write-Host "Rama local actual: $(git branch --show-current)"
+        Write-Host "Commit actual: $(git rev-parse HEAD)"
+        
+        # Fetch todas las ramas de GitHub para conocer el estado
+        Write-Host "Obteniendo todas las ramas de GitHub..."
+        git fetch github --all 2>&1
+        
+        # Verificar si la rama existe en GitHub
+        Write-Host "Verificando si la rama '$branch' existe en GitHub..."
+        git ls-remote --heads github $branch 2>&1
+        $branchExistsOnGitHub = $LASTEXITCODE -eq 0
+        
+        if ($branchExistsOnGitHub) {
+            Write-Host "La rama '$branch' ya existe en GitHub"
+        } else {
+            Write-Host "La rama '$branch' NO existe en GitHub - se creará automáticamente"
+        }
+        
         while (-not $success -and $retryCount -lt $maxRetries) {
             $retryCount++
             Write-Host "Intento $retryCount de $maxRetries"
             
             try {
-                # Fetch latest changes from GitHub to avoid conflicts
-                Write-Host "Obteniendo últimos cambios de GitHub..."
-                git fetch github $branch 2>$null
-                
-                # Push with force-with-lease for safety
-                Write-Host "Pushing rama $branch a GitHub..."
-                git push github "HEAD:refs/heads/$branch" --force-with-lease --verbose
+                if ($branchExistsOnGitHub) {
+                    # Si la rama existe, hacer fetch para evitar conflictos
+                    Write-Host "Obteniendo últimos cambios de la rama '$branch' en GitHub..."
+                    git fetch github "refs/heads/$branch:refs/remotes/github/$branch" 2>&1
+                    
+                    # Verificar si hay conflictos
+                    $localCommit = git rev-parse HEAD
+                    $remoteCommit = git rev-parse "github/$branch" 2>$null
+                    
+                    if ($remoteCommit -and $localCommit -ne $remoteCommit) {
+                        Write-Host "Detectadas diferencias entre local y remoto"
+                        Write-Host "Local:  $localCommit"
+                        Write-Host "Remoto: $remoteCommit"
+                        Write-Host "Usando --force-with-lease para push seguro..."
+                        git push github "HEAD:refs/heads/$branch" --force-with-lease 2>&1
+                    } else {
+                        Write-Host "Push normal de la rama '$branch'..."
+                        git push github "HEAD:refs/heads/$branch" 2>&1
+                    }
+                } else {
+                    # Si la rama no existe, crearla directamente
+                    Write-Host "Creando nueva rama '$branch' en GitHub..."
+                    git push github "HEAD:refs/heads/$branch" 2>&1
+                }
                 
                 if ($LASTEXITCODE -eq 0) {
-                    Write-Host "Mirror exitoso para la rama $branch"
+                    Write-Host "Mirror exitoso para la rama '$branch'"
                     $success = $true
+                    
+                    # Verificar que el push fue exitoso
+                    Write-Host "Verificando el push..."
+                    git ls-remote --heads github $branch 2>&1
+                    if ($LASTEXITCODE -eq 0) {
+                        Write-Host "Verificación exitosa - rama sincronizada correctamente"
+                    }
                 } else {
                     throw "Git push falló con código $LASTEXITCODE"
                 }
@@ -161,8 +219,17 @@ stages:
                 if ($retryCount -lt $maxRetries) {
                     Write-Host "Esperando 10 segundos antes del siguiente intento..."
                     Start-Sleep -Seconds 10
+                    
+                    # Re-verificar si la rama ahora existe (por si otro proceso la creó)
+                    git ls-remote --heads github $branch 2>&1
+                    $branchExistsOnGitHub = $LASTEXITCODE -eq 0
                 } else {
                     Write-Error "Todos los intentos de mirror fallaron"
+                    Write-Host "Información de debugging:"
+                    Write-Host "- Rama: $branch"
+                    Write-Host "- GitHub Owner: $(GITHUB_OWNER)"
+                    Write-Host "- GitHub Repo: $(GITHUB_REPO)"
+                    Write-Host "- Último error: $($_.Exception.Message)"
                     exit 1
                 }
             }
@@ -184,7 +251,17 @@ stages:
         Write-Host "Build: $(Build.BuildNumber)"
         Write-Host "Hora: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
         Write-Host "GitHub: https://github.com/$(GITHUB_OWNER)/$(GITHUB_REPO)"
+        Write-Host "Rama: https://github.com/$(GITHUB_OWNER)/$(GITHUB_REPO)/tree/$(Build.SourceBranchName)"
         Write-Host "====================="
+        
+        # Verificación final de sincronización
+        Write-Host "Verificación final..."
+        git ls-remote --heads github $(Build.SourceBranchName) 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "Sincronización confirmada - rama disponible en GitHub"
+        } else {
+            Write-Warning "No se pudo verificar la sincronización"
+        }
       displayName: 'Mirror Summary'
       env:
         GITHUB_OWNER: $(GITHUB_OWNER)
