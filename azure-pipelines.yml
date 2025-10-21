@@ -22,10 +22,12 @@ steps:
       git config user.name "Azure DevOps"
       git config user.email "build@azuredevops.local"
 
-      git remote remove github 2>$null
+      $remoteUrl = "https://$(GITHUB_USER):$(GITHUB_PAT)@github.com/$(GH_OWNER)/$(GH_REPO).git"
 
-      $remote = "https://$(GITHUB_USER):$(GITHUB_PAT)@github.com/$(GH_OWNER)/$(GH_REPO).git"
-      git remote add github $remote
+      git remote set-url github $remoteUrl 2>$null
+      if ($LASTEXITCODE -ne 0) {
+        git remote add github $remoteUrl
+      }
 
       $branch = "$(Build.SourceBranchName)"
       Write-Host "Pushing branch $branch to $(GH_REPO)..."
