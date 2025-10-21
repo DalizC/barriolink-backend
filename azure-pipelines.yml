@@ -24,7 +24,7 @@ steps:
 
       git remote remove github 2>$null
 
-      $remote = "https://$(GITHUB_USER):$(GITHUB_TOKEN)@github.com/$(GH_OWNER)/$(GH_REPO).git"
+      $remote = "https://$(GITHUB_USER):$(GITHUB_PAT)@github.com/$(GH_OWNER)/$(GH_REPO).git"
       git remote add github $remote
 
       $branch = "$(Build.SourceBranchName)"
