@@ -5,32 +5,29 @@
 
 trigger:
   branches:
-    include: [ main, develop, release/*, feature/* ]
-  tags:
-    include: [ 'v*' ]
-pr: none
+    include: [ main, develop, release/* ]
+pr:
+  branches:
+    include: [ main, develop]
 
 pool: 
   name: home-office
-  #vmImage: ubuntu-latest
 
 steps:
-- checkout: self
-  fetchDepth: 0
+  - checkout: self
+    fetchDepth: 0
 
-- powershell: |
-    $ErrorActionPreference = 'Stop'
-    git config user.name  "ci-mirror"
-    git config user.email "ci-mirror@example.com"
+  - powershell: |
+      $ErrorActionPreference = 'Stop'
+      git config user.name "Azure DevOps"
+      git config user.email "build@azuredevops.local"
 
-    # Construye Authorization: Basic <base64(user:token)> sin exponer el PAT
-    $pair = "$(GITHUB_USER):$(GITHUB_PAT)"
-    $bytes = [System.Text.Encoding]::ASCII.GetBytes($pair)
-    $b64  = [System.Convert]::ToBase64String($bytes)
+      git remote remove github 2>$null
 
-    $url  = "https://github.com/DalizC/barriolink-backend.git"
+      $remote = "https://$(GITHUB_USER):$(GITHUB_TOKEN)@github.com/$(GH_OWNER)/$(GH_REPO).git"
+      git remote add github $remote
 
-    # Espejo no destructivo: crea/actualiza ramas y tags
-    git -c http.extraheader="Authorization: Basic $b64" push $url --all
-    git -c http.extraheader="Authorization: Basic $b64" push $url --tags
-  displayName: 'Mirror to GitHub (DalizC/barriolink-backend)'
+      $branch = "$(Build.SourceBranchName)"
+      Write-Host "Pushing branch $branch to $(GH_REPO)..."
+      git push github "HEAD:refs/heads/$branch" --force-with-lease
+    displayName: 'Mirror to GitHub'
