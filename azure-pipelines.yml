@@ -30,6 +30,6 @@ steps:
       }
 
       $branch = "$(Build.SourceBranchName)"
-      Write-Host "Pushing branch $branch to $(GH_REPO)..."
+      Write-Host "Pushing branch $branch to $(GITHUB_REPO)..."
       git push github "HEAD:refs/heads/$branch" --force-with-lease
     displayName: 'Mirror to GitHub'
