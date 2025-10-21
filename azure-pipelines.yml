@@ -137,7 +137,14 @@ stages:
 
     - powershell: |
         $ErrorActionPreference = 'Continue'  # Manejo manual de errores
-        $branch = "$(Build.SourceBranchName)"
+        
+        # Obtener el nombre completo de la rama desde Build.SourceBranch
+        $sourceBranch = "$(Build.SourceBranch)"
+        $branch = $sourceBranch -replace "refs/heads/", ""
+        
+        Write-Host "Source Branch: $sourceBranch"
+        Write-Host "Rama extraída: $branch"
+        
         $maxRetries = $(maxRetries)
         $retryCount = 0
         $success = $false
@@ -239,19 +246,23 @@ stages:
         GITHUB_REPO: $(GITHUB_REPO)
 
     - powershell: |
+        # Obtener el nombre completo de la rama
+        $sourceBranch = "$(Build.SourceBranch)"
+        $branch = $sourceBranch -replace "refs/heads/", ""
+        
         Write-Host "RESUMEN DEL MIRROR"
         Write-Host "====================="
-        Write-Host "Rama sincronizada: $(Build.SourceBranchName)"
+        Write-Host "Rama sincronizada: $branch"
         Write-Host "Commit: $(Build.SourceVersion)"
         Write-Host "Build: $(Build.BuildNumber)"
         Write-Host "Hora: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
         Write-Host "GitHub: https://github.com/$(GITHUB_OWNER)/$(GITHUB_REPO)"
-        Write-Host "Rama: https://github.com/$(GITHUB_OWNER)/$(GITHUB_REPO)/tree/$(Build.SourceBranchName)"
+        Write-Host "Rama: https://github.com/$(GITHUB_OWNER)/$(GITHUB_REPO)/tree/$branch"
         Write-Host "====================="
         
         # Verificación final de sincronización
         Write-Host "Verificación final..."
-        git ls-remote --heads github $(Build.SourceBranchName) 2>&1
+        git ls-remote --heads github $branch 2>&1
         if ($LASTEXITCODE -eq 0) {
             Write-Host "Sincronización confirmada - rama disponible en GitHub"
         } else {
