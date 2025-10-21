@@ -1,36 +1,192 @@
-# Starter pipeline
-# Start with a minimal pipeline that you can customize to build and deploy your code.
-# Add steps that build, run tests, deploy, and more:
-# https://aka.ms/yaml
+# ===================================
+# AZURE REPOS -> GITHUB MIRROR PIPELINE
+# ===================================
+# Mantiene sincronizados Azure Repos y GitHub
+# Triggers en ramas principales y features
 
-# Azure Repos -> GitHub sync, por rama que dispara el build (sin force)
+name: 'Mirror-$(Build.SourceBranchName)-$(Date:yyyyMMdd)$(Rev:.r)'
+
+# Trigger: Se ejecuta cuando hay push a estas ramas
 trigger:
   branches:
-    include: [ main, develop, release/* ]
+    include: 
+      - main
+      - develop
+      - release/*
+      - feature/*
+  paths:
+    exclude:
+      - README.md
+      - docs/*
+      - '*.md'
+
+# Pull Request: También sincroniza en PRs
 pr:
   branches:
-    include: [ main, develop]
+    include: 
+      - main
+      - develop
+  paths:
+    exclude:
+      - README.md
+      - docs/*
+      - '*.md'
+
+# Variables del pipeline
+variables:
+  - name: shouldMirror
+    value: true
+  - name: maxRetries
+    value: 3
 
 pool: 
   name: home-office
 
-steps:
-  - checkout: self
-    fetchDepth: 0
+stages:
+- stage: ValidateAndMirror
+  displayName: 'Validate and Mirror to GitHub'
+  
+  jobs:
+  - job: PreValidation
+    displayName: 'Pre-validation Checks'
+    steps:
+    - checkout: self
+      fetchDepth: 0
+      displayName: 'Checkout with full history'
 
-  - powershell: |
-      $ErrorActionPreference = 'Stop'
-      git config user.name "Azure DevOps"
-      git config user.email "build@azuredevops.local"
+    - powershell: |
+        Write-Host "=== PIPELINE INFORMATION ==="
+        Write-Host "Source Branch: $(Build.SourceBranch)"
+        Write-Host "Branch Name: $(Build.SourceBranchName)"
+        Write-Host "Repository: $(Build.Repository.Name)"
+        Write-Host "Commit: $(Build.SourceVersion)"
+        Write-Host "Trigger Reason: $(Build.Reason)"
+        Write-Host "================================"
+        
+        # Verificar que las variables estén configuradas
+        if (-not $env:GITHUB_USER -or -not $env:GITHUB_PAT -or -not $env:GITHUB_OWNER -or -not $env:GITHUB_REPO) {
+            Write-Error "Variables de GitHub no configuradas correctamente"
+            Write-Host "Variables necesarias: GITHUB_USER, GITHUB_PAT, GITHUB_OWNER, GITHUB_REPO"
+            exit 1
+        }
+        Write-Host "Variables de GitHub configuradas correctamente"
+      displayName: 'Display Build Information'
+      env:
+        GITHUB_USER: $(GITHUB_USER)
+        GITHUB_PAT: $(GITHUB_PAT)
+        GITHUB_OWNER: $(GITHUB_OWNER)
+        GITHUB_REPO: $(GITHUB_REPO)
 
-      $remoteUrl = "https://$(GITHUB_USER):$(GITHUB_PAT)@github.com/$(GITHUB_OWNER)/$(GITHUB_REPO).git"
+  - job: MirrorToGitHub
+    displayName: 'Mirror Repository to GitHub'
+    dependsOn: PreValidation
+    condition: and(succeeded(), eq(variables.shouldMirror, 'true'))
+    
+    steps:
+    - checkout: self
+      fetchDepth: 0
+      displayName: 'Checkout with full history'
 
-      git remote set-url github $remoteUrl 2>$null
-      if ($LASTEXITCODE -ne 0) {
-        git remote add github $remoteUrl
-      }
+    - powershell: |
+        $ErrorActionPreference = 'Stop'
+        
+        Write-Host "Configurando Git..."
+        git config user.name "Azure DevOps Mirror"
+        git config user.email "azuredevops-mirror@barriolink.com"
+        git config core.autocrlf false
+        
+        Write-Host "Información del repositorio:"
+        git log --oneline -5
+        
+        Write-Host "Configurando remote GitHub..."
+        $remoteUrl = "https://$(GITHUB_USER):$(GITHUB_PAT)@github.com/$(GITHUB_OWNER)/$(GITHUB_REPO).git"
+        
+        # Verificar si el remote ya existe
+        $existingRemote = git remote get-url github 2>$null
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "Actualizando remote existente..."
+            git remote set-url github $remoteUrl
+        } else {
+            Write-Host "Agregando nuevo remote..."
+            git remote add github $remoteUrl
+        }
+        
+        Write-Host "Verificando conectividad con GitHub..."
+        git ls-remote github HEAD > $null
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "No se puede conectar a GitHub. Verificar credenciales."
+            exit 1
+        }
+        Write-Host "Conexión a GitHub exitosa"
+        
+      displayName: 'Configure Git and GitHub Remote'
+      env:
+        GITHUB_USER: $(GITHUB_USER)
+        GITHUB_PAT: $(GITHUB_PAT)
+        GITHUB_OWNER: $(GITHUB_OWNER)
+        GITHUB_REPO: $(GITHUB_REPO)
 
-      $branch = "$(Build.SourceBranchName)"
-      Write-Host "Pushing branch $branch to $(GITHUB_REPO)..."
-      git push github "HEAD:refs/heads/$branch" --force-with-lease
-    displayName: 'Mirror to GitHub'
+    - powershell: |
+        $ErrorActionPreference = 'Stop'
+        $branch = "$(Build.SourceBranchName)"
+        $maxRetries = $(maxRetries)
+        $retryCount = 0
+        $success = $false
+        
+        Write-Host "Iniciando mirror de la rama: $branch"
+        Write-Host "Target: $(GITHUB_OWNER)/$(GITHUB_REPO)"
+        
+        while (-not $success -and $retryCount -lt $maxRetries) {
+            $retryCount++
+            Write-Host "Intento $retryCount de $maxRetries"
+            
+            try {
+                # Fetch latest changes from GitHub to avoid conflicts
+                Write-Host "Obteniendo últimos cambios de GitHub..."
+                git fetch github $branch 2>$null
+                
+                # Push with force-with-lease for safety
+                Write-Host "Pushing rama $branch a GitHub..."
+                git push github "HEAD:refs/heads/$branch" --force-with-lease --verbose
+                
+                if ($LASTEXITCODE -eq 0) {
+                    Write-Host "Mirror exitoso para la rama $branch"
+                    $success = $true
+                } else {
+                    throw "Git push falló con código $LASTEXITCODE"
+                }
+            }
+            catch {
+                Write-Warning "Intento $retryCount falló: $($_.Exception.Message)"
+                if ($retryCount -lt $maxRetries) {
+                    Write-Host "Esperando 10 segundos antes del siguiente intento..."
+                    Start-Sleep -Seconds 10
+                } else {
+                    Write-Error "Todos los intentos de mirror fallaron"
+                    exit 1
+                }
+            }
+        }
+        
+        Write-Host "Mirror completado exitosamente!"
+        Write-Host "URL: https://github.com/$(GITHUB_OWNER)/$(GITHUB_REPO)/tree/$branch"
+        
+      displayName: 'Push to GitHub with Retry Logic'
+      env:
+        GITHUB_OWNER: $(GITHUB_OWNER)
+        GITHUB_REPO: $(GITHUB_REPO)
+
+    - powershell: |
+        Write-Host "RESUMEN DEL MIRROR"
+        Write-Host "====================="
+        Write-Host "Rama sincronizada: $(Build.SourceBranchName)"
+        Write-Host "Commit: $(Build.SourceVersion)"
+        Write-Host "Build: $(Build.BuildNumber)"
+        Write-Host "Hora: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
+        Write-Host "GitHub: https://github.com/$(GITHUB_OWNER)/$(GITHUB_REPO)"
+        Write-Host "====================="
+      displayName: 'Mirror Summary'
+      env:
+        GITHUB_OWNER: $(GITHUB_OWNER)
+        GITHUB_REPO: $(GITHUB_REPO)
+      condition: always()
