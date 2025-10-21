@@ -157,11 +157,7 @@ stages:
         Write-Host "Rama local actual: $(git branch --show-current)"
         Write-Host "Commit actual: $(git rev-parse HEAD)"
         
-        # Fetch todas las ramas de GitHub para conocer el estado
-        Write-Host "Obteniendo todas las ramas de GitHub..."
-        git fetch github --all 2>&1
-        
-        # Verificar si la rama existe en GitHub
+        # Verificar si la rama existe en GitHub (sin hacer fetch todavía)
         Write-Host "Verificando si la rama '$branch' existe en GitHub..."
         git ls-remote --heads github $branch 2>&1
         $branchExistsOnGitHub = $LASTEXITCODE -eq 0
@@ -177,29 +173,31 @@ stages:
             Write-Host "Intento $retryCount de $maxRetries"
             
             try {
+                # Simplificar: siempre hacer fetch general primero
+                Write-Host "Obteniendo referencias de GitHub..."
+                git fetch github 2>&1
+                
                 if ($branchExistsOnGitHub) {
-                    # Si la rama existe, hacer fetch para evitar conflictos
-                    Write-Host "Obteniendo últimos cambios de la rama '$branch' en GitHub..."
-                    git fetch github "refs/heads/$branch:refs/remotes/github/$branch" 2>&1
+                    Write-Host "La rama '$branch' existe en GitHub, sincronizando..."
                     
-                    # Verificar si hay conflictos
+                    # Obtener commits para comparar
                     $localCommit = git rev-parse HEAD
                     $remoteCommit = git rev-parse "github/$branch" 2>$null
                     
-                    if ($remoteCommit -and $localCommit -ne $remoteCommit) {
-                        Write-Host "Detectadas diferencias entre local y remoto"
-                        Write-Host "Local:  $localCommit"
-                        Write-Host "Remoto: $remoteCommit"
-                        Write-Host "Usando --force-with-lease para push seguro..."
-                        git push github "HEAD:refs/heads/$branch" --force-with-lease 2>&1
+                    Write-Host "Local:  $localCommit"
+                    Write-Host "Remoto: $remoteCommit"
+                    
+                    if ($localCommit -eq $remoteCommit) {
+                        Write-Host "Las ramas están sincronizadas, no hay cambios que enviar"
+                        $success = $true
                     } else {
-                        Write-Host "Push normal de la rama '$branch'..."
-                        git push github "HEAD:refs/heads/$branch" 2>&1
+                        Write-Host "Push con --force-with-lease para seguridad..."
+                        git push github "HEAD:$branch" --force-with-lease 2>&1
                     }
                 } else {
                     # Si la rama no existe, crearla directamente
                     Write-Host "Creando nueva rama '$branch' en GitHub..."
-                    git push github "HEAD:refs/heads/$branch" 2>&1
+                    git push github "HEAD:$branch" 2>&1
                 }
                 
                 if ($LASTEXITCODE -eq 0) {
