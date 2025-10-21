@@ -22,7 +22,7 @@ steps:
       git config user.name "Azure DevOps"
       git config user.email "build@azuredevops.local"
 
-      $remoteUrl = "https://$(GITHUB_USER):$(GITHUB_PAT)@github.com/$(GH_OWNER)/$(GH_REPO).git"
+      $remoteUrl = "https://$(GITHUB_USER):$(GITHUB_PAT)@github.com/$(GITHUB_OWNER)/$(GITHUB_REPO).git"
 
       git remote set-url github $remoteUrl 2>$null
       if ($LASTEXITCODE -ne 0) {
