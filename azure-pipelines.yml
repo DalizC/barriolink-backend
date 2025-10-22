@@ -568,10 +568,7 @@ stages:
         Write-Host "Esperando que la base de datos esté disponible..."
         & "venv\Scripts\python.exe" manage.py wait_for_db --settings=app.settings
         
-        Write-Host "Aplicando migraciones (PostgreSQL)..."
-        & "venv\Scripts\python.exe" manage.py migrate --settings=app.settings
-        
-        Write-Host "Verificando configuración final..."
+        Write-Host "Verificando configuración de Django..."
         & "venv\Scripts\python.exe" manage.py check --settings=app.settings
         
         Write-Host ""
@@ -587,7 +584,6 @@ stages:
         Copy-Item -Recurse -Path "core" -Destination "artifacts/"
         Copy-Item -Path "manage.py" -Destination "artifacts/"
         Copy-Item -Path "requirements.txt" -Destination "artifacts/"
-        Copy-Item -Path ".env.development" -Destination "artifacts/.env.example"
         
         # Crear script de deployment básico
         Write-Host "Creando script de deployment..."
