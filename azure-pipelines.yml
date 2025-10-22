@@ -4,15 +4,21 @@
 # Mantiene sincronizados Azure Repos y GitHub
 # Triggers en ramas principales y features
 
-name: 'Mirror-$(Build.SourceBranchName)-$(Date:yyyyMMdd)$(Rev:.r)'
+name: 'Mirror-$(Date:yyyyMMdd)$(Rev:.r)'
 
-# Trigger: Se ejecuta en todas las ramas (para debug)
-trigger: 
-- main
-- develop
-- release/*
-- feature/*
-- feature/dzurita/djangorest
+# Trigger: Se ejecuta cuando hay push a estas ramas
+trigger:
+  branches:
+    include: 
+      - main
+      - develop
+      - release/*
+      - feature/*
+  paths:
+    exclude:
+      - README.md
+      - docs/*
+      - '*.md'
 
 # Pull Request: También sincroniza en PRs
 pr:
@@ -20,12 +26,11 @@ pr:
     include: 
       - main
       - develop
-  # Removemos exclusiones temporalmente
-  # paths:
-  #   exclude:
-  #     - README.md
-  #     - docs/*
-  #     - '*.md'
+  paths:
+    exclude:
+      - README.md
+      - docs/*
+      - '*.md'
 
 # Variables del pipeline
 variables:
