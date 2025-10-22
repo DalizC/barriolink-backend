@@ -589,44 +589,22 @@ stages:
         Copy-Item -Path "requirements.txt" -Destination "artifacts/"
         Copy-Item -Path ".env.development" -Destination "artifacts/.env.example"
         
-        # Crear script de deployment
+        # Crear script de deployment básico
         Write-Host "Creando script de deployment..."
-        $deployScript = @'
-@echo off
-echo BARRIOLINK DEPLOYMENT SCRIPT
-echo ============================
-echo.
-echo 1. Install Python dependencies:
-echo    pip install -r requirements.txt
-echo.  
-echo 2. Configure environment variables (copy .env.example to .env)
-echo    Set DB_HOST, DB_USER, DB_PASSWORD, SECRET_KEY
-echo.
-echo 3. Run migrations:
-echo    python manage.py migrate --settings=app.settings
-echo.
-echo 4. Start production server (requires gunicorn):
-echo    pip install gunicorn
-echo    gunicorn app.wsgi:application --bind 0.0.0.0:8000
-echo.
-echo 5. Access application:
-echo    http://localhost:8000
-echo    http://localhost:8000/admin/
-echo    http://localhost:8000/api/
-echo.
-pause
-'@
-        $deployScript | Out-File -FilePath "artifacts/deploy.bat" -Encoding ASCII
+        "echo BARRIOLINK DEPLOYMENT SCRIPT" | Out-File -FilePath "artifacts/deploy.bat" -Encoding ASCII
+        "echo pip install -r requirements.txt" | Out-File -FilePath "artifacts/deploy.bat" -Encoding ASCII -Append
+        "echo python manage.py migrate --settings=app.settings" | Out-File -FilePath "artifacts/deploy.bat" -Encoding ASCII -Append
+        "echo gunicorn app.wsgi:application --bind 0.0.0.0:8000" | Out-File -FilePath "artifacts/deploy.bat" -Encoding ASCII -Append
         
-        Write-Host "✅ Artefactos creados en ./artifacts/"
-        Write-Host "✅ Build completado exitosamente"
+        Write-Host " Artefactos creados en ./artifacts/"
+        Write-Host " Build completado exitosamente"
         Write-Host ""
         Write-Host "PRÓXIMOS PASOS PARA DEPLOYMENT:"
         Write-Host "==============================="
-        Write-Host "1. 📦 Los artefactos están listos para deployment"
-        Write-Host "2. 🚀 Crear Release Pipeline para deployment automático"
-        Write-Host "3. 🌐 Configurar IIS/Nginx + Gunicorn para producción"
-        Write-Host "4. 🔒 Separar variables por ambiente (Dev/Prod)"
+        Write-Host "1. Los artefactos están listos para deployment"
+        Write-Host "2. Crear Release Pipeline para deployment automático"
+        Write-Host "3. Configurar IIS/Nginx + Gunicorn para producción"
+        Write-Host "4. Separar variables por ambiente (Dev/Prod)"
         Write-Host "==============================="
       displayName: 'Create Deployment Artifacts'
       workingDirectory: '$(Build.SourcesDirectory)'
