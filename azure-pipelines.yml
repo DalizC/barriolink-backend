@@ -296,13 +296,15 @@ stages:
         Write-Host "BACKEND BUILD PROCESS"
         Write-Host "====================="
         
-        # Buscar Python en múltiples ubicaciones comunes
+        # Buscar Python en múltiples ubicaciones comunes (priorizando instalaciones directas)
         $possiblePaths = @(
             "C:\Python312\python.exe",
-            "C:\Program Files\Python312\python.exe",
+            "C:\Program Files\Python312\python.exe", 
             "C:\Program Files (x86)\Python312\python.exe",
             "C:\Users\$env:USERNAME\AppData\Local\Programs\Python\Python312\python.exe",
             "C:\Users\dzuri\AppData\Local\Programs\Python\Python312\python.exe",
+            "C:\Python311\python.exe",
+            "C:\Program Files\Python311\python.exe",
             "py"
         )
         
@@ -352,8 +354,9 @@ stages:
         
         Write-Host "Creando entorno virtual Python..."
         if ($pythonPath -like "py *") {
-            # Usar Python Launcher
-            Invoke-Expression "$pythonPath -m venv venv"
+            # Usar Python Launcher con workaround para bibliotecas
+            Write-Host "Usando Python Launcher con configuración específica..."
+            py -3.12 -m venv venv --copies
         } else {
             # Usar ruta directa
             & $pythonPath -m venv venv
@@ -407,6 +410,8 @@ stages:
             "C:\Program Files (x86)\Python312\python.exe",
             "C:\Users\$env:USERNAME\AppData\Local\Programs\Python\Python312\python.exe",
             "C:\Users\dzuri\AppData\Local\Programs\Python\Python312\python.exe",
+            "C:\Python311\python.exe",
+            "C:\Program Files\Python311\python.exe",
             "py"
         )
         
@@ -442,7 +447,7 @@ stages:
         
         Write-Host "Recreando entorno virtual..."
         if ($pythonPath -like "py *") {
-            Invoke-Expression "$pythonPath -m venv venv"
+            py -3.12 -m venv venv --copies
         } else {
             & $pythonPath -m venv venv
         }
@@ -485,6 +490,8 @@ stages:
             "C:\Program Files (x86)\Python312\python.exe", 
             "C:\Users\$env:USERNAME\AppData\Local\Programs\Python\Python312\python.exe",
             "C:\Users\dzuri\AppData\Local\Programs\Python\Python312\python.exe",
+            "C:\Python311\python.exe",
+            "C:\Program Files\Python311\python.exe",
             "py"
         )
         
@@ -520,7 +527,7 @@ stages:
         
         Write-Host "Preparando entorno..."
         if ($pythonPath -like "py *") {
-            Invoke-Expression "$pythonPath -m venv venv"
+            py -3.12 -m venv venv --copies
         } else {
             & $pythonPath -m venv venv
         }
