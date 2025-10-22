@@ -38,6 +38,8 @@ variables:
     value: true
   - name: maxRetries
     value: 3
+  - name: shouldDeploy
+    value: true
 
 pool: 
   name: home-office
@@ -276,3 +278,142 @@ stages:
         GITHUB_OWNER: $(GITHUB_OWNER)
         GITHUB_REPO: $(GITHUB_REPO)
       condition: always()
+
+- stage: BuildAndTest
+  displayName: 'Build and Test Django Backend'
+  dependsOn: ValidateAndMirror
+  condition: and(succeeded(), eq(variables.shouldDeploy, 'true'))
+  
+  jobs:
+  - job: BuildBackend
+    displayName: 'Setup Django Backend'
+    steps:
+    - checkout: self
+      fetchDepth: 1
+      displayName: 'Checkout source code'
+
+    - task: UsePythonVersion@0
+      displayName: 'Setup Python 3.12'
+      inputs:
+        versionSpec: '3.12'
+        addToPath: true
+
+    - powershell: |
+        Write-Host "BACKEND BUILD PROCESS"
+        Write-Host "====================="
+        Write-Host "Directorio actual: $(Get-Location)"
+        Write-Host "Estructura del proyecto:"
+        ls
+        
+        Write-Host "Creando entorno virtual Python..."
+        python -m venv venv
+        
+        Write-Host "Activando entorno virtual..."
+        & "venv\Scripts\Activate.ps1"
+        
+        Write-Host "Verificando Python y pip..."
+        python --version
+        pip --version
+        
+        Write-Host "Actualizando pip..."
+        python -m pip install --upgrade pip
+        
+        Write-Host "Instalando dependencias de Django..."
+        pip install -r requirements.txt
+        
+        Write-Host "Verificando instalación de Django..."
+        python -c "import django; print(f'Django {django.get_version()} instalado correctamente')"
+        
+        Write-Host "Verificando configuración de Django..."
+        python manage.py check --settings=app.settings
+        
+        Write-Host "Ejecutando migraciones (dry-run)..."
+        python manage.py makemigrations --dry-run --settings=app.settings
+        
+        Write-Host "BACKEND CONFIGURADO EXITOSAMENTE"
+        Write-Host "================================="
+      displayName: 'Setup Django Environment'
+      workingDirectory: '$(Build.SourcesDirectory)'
+
+  - job: TestBackend  
+    displayName: 'Run Django Tests'
+    dependsOn: BuildBackend
+    steps:
+    - checkout: self
+      fetchDepth: 1
+
+    - task: UsePythonVersion@0
+      displayName: 'Setup Python 3.12'
+      inputs:
+        versionSpec: '3.12'
+        addToPath: true
+
+    - powershell: |
+        Write-Host "TESTING DJANGO BACKEND"
+        Write-Host "======================"
+        
+        Write-Host "Recreando entorno virtual..."
+        python -m venv venv
+        & "venv\Scripts\Activate.ps1"
+        pip install --upgrade pip
+        pip install -r requirements.txt
+        
+        Write-Host "Ejecutando tests de Django..."
+        python manage.py test --settings=app.settings --verbosity=2
+        
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "TESTS PASARON EXITOSAMENTE"
+            Write-Host "=========================="
+        } else {
+            Write-Error "Algunos tests fallaron"
+            exit 1
+        }
+      displayName: 'Run Django Tests'
+      workingDirectory: '$(Build.SourcesDirectory)'
+
+  - job: StartServer
+    displayName: 'Start Django Development Server'
+    dependsOn: [BuildBackend, TestBackend] 
+    condition: succeeded()
+    steps:
+    - checkout: self
+      fetchDepth: 1
+
+    - task: UsePythonVersion@0
+      displayName: 'Setup Python 3.12'
+      inputs:
+        versionSpec: '3.12'
+        addToPath: true
+
+    - powershell: |
+        Write-Host "STARTING DJANGO SERVER"
+        Write-Host "======================"
+        
+        Write-Host "Preparando entorno..."
+        python -m venv venv
+        & "venv\Scripts\Activate.ps1"
+        pip install --upgrade pip
+        pip install -r requirements.txt
+        
+        Write-Host "Aplicando migraciones..."
+        python manage.py migrate --settings=app.settings
+        
+        Write-Host "Recolectando archivos estáticos..."
+        python manage.py collectstatic --noinput --settings=app.settings
+        
+        Write-Host ""
+        Write-Host "DJANGO BACKEND LISTO!"
+        Write-Host "===================="
+        Write-Host "Para iniciar el servidor localmente:"
+        Write-Host "1. Activa el entorno virtual:"
+        Write-Host "   .venv\Scripts\Activate.ps1"
+        Write-Host "2. Inicia el servidor:"
+        Write-Host "   python manage.py runserver --settings=app.settings"
+        Write-Host "3. Visita: http://localhost:8000"
+        Write-Host ""
+        Write-Host "APIs disponibles:"
+        Write-Host "- Admin: http://localhost:8000/admin/"
+        Write-Host "- API Root: http://localhost:8000/api/"
+        Write-Host "===================="
+      displayName: 'Prepare Django Server'
+      workingDirectory: '$(Build.SourcesDirectory)'
