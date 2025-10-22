@@ -295,41 +295,45 @@ stages:
     - powershell: |
         Write-Host "BACKEND BUILD PROCESS"
         Write-Host "====================="
-        Write-Host "Verificando Python disponible en el sistema..."
-        python --version
-        python -c "import sys; print(f'Python executable: {sys.executable}')"
+        
+        # Definir la ruta de Python instalado
+        $pythonPath = "C:\Users\dzuri\AppData\Local\Programs\Python\Python312\python.exe"
+        
+        Write-Host "Verificando Python en: $pythonPath"
+        & $pythonPath --version
+        & $pythonPath -c "import sys; print(f'Python executable: {sys.executable}')"
         Write-Host ""
         Write-Host "Directorio actual: $(Get-Location)"
         Write-Host "Estructura del proyecto:"
         ls
         
         Write-Host "Creando entorno virtual Python..."
-        python -m venv venv
+        & $pythonPath -m venv venv
         
         Write-Host "Activando entorno virtual..."
         & "venv\Scripts\Activate.ps1"
         
-        Write-Host "Verificando Python y pip..."
-        python --version
-        pip --version
+        Write-Host "Verificando Python y pip del venv..."
+        & "venv\Scripts\python.exe" --version
+        & "venv\Scripts\pip.exe" --version
         
         Write-Host "Actualizando pip..."
-        python -m pip install --upgrade pip
+        & "venv\Scripts\python.exe" -m pip install --upgrade pip
         
         Write-Host "Instalando dependencias de Django..."
-        pip install -r requirements.txt
+        & "venv\Scripts\pip.exe" install -r requirements.txt
         
         Write-Host "Verificando instalación de Django..."
-        python -c "import django; print(f'Django {django.get_version()} instalado correctamente')"
+        & "venv\Scripts\python.exe" -c "import django; print(f'Django {django.get_version()} instalado correctamente')"
         
         Write-Host "Esperando que la base de datos esté disponible..."
-        python manage.py wait_for_db --settings=app.settings
+        & "venv\Scripts\python.exe" manage.py wait_for_db --settings=app.settings
         
         Write-Host "Verificando configuración de Django..."
-        python manage.py check --settings=app.settings
+        & "venv\Scripts\python.exe" manage.py check --settings=app.settings
         
         Write-Host "Ejecutando migraciones (dry-run)..."
-        python manage.py makemigrations --dry-run --settings=app.settings
+        & "venv\Scripts\python.exe" manage.py makemigrations --dry-run --settings=app.settings
         
         Write-Host "BACKEND CONFIGURADO EXITOSAMENTE"
         Write-Host "================================="
@@ -344,22 +348,25 @@ stages:
       fetchDepth: 1
 
     - powershell: |
+        # Definir la ruta de Python instalado
+        $pythonPath = "C:\Users\dzuri\AppData\Local\Programs\Python\Python312\python.exe"
+        
         Write-Host "TESTING DJANGO BACKEND"
         Write-Host "======================"
         Write-Host "Verificando Python disponible..."
-        python --version
+        & $pythonPath --version
         
         Write-Host "Recreando entorno virtual..."
-        python -m venv venv
+        & $pythonPath -m venv venv
         & "venv\Scripts\Activate.ps1"
-        pip install --upgrade pip
-        pip install -r requirements.txt
+        & "venv\Scripts\pip.exe" install --upgrade pip
+        & "venv\Scripts\pip.exe" install -r requirements.txt
         
         Write-Host "Esperando que la base de datos esté disponible..."
-        python manage.py wait_for_db --settings=app.settings
+        & "venv\Scripts\python.exe" manage.py wait_for_db --settings=app.settings
         
         Write-Host "Ejecutando tests de Django..."
-        python manage.py test --settings=app.settings --verbosity=2
+        & "venv\Scripts\python.exe" manage.py test --settings=app.settings --verbosity=2
         
         if ($LASTEXITCODE -eq 0) {
             Write-Host "TESTS PASARON EXITOSAMENTE"
@@ -380,25 +387,28 @@ stages:
       fetchDepth: 1
 
     - powershell: |
+        # Definir la ruta de Python instalado
+        $pythonPath = "C:\Users\dzuri\AppData\Local\Programs\Python\Python312\python.exe"
+        
         Write-Host "STARTING DJANGO SERVER"
         Write-Host "======================"
         Write-Host "Verificando Python disponible..."
-        python --version
+        & $pythonPath --version
         
         Write-Host "Preparando entorno..."
-        python -m venv venv
+        & $pythonPath -m venv venv
         & "venv\Scripts\Activate.ps1"
-        pip install --upgrade pip
-        pip install -r requirements.txt
+        & "venv\Scripts\pip.exe" install --upgrade pip
+        & "venv\Scripts\pip.exe" install -r requirements.txt
         
         Write-Host "Esperando que la base de datos esté disponible..."
-        python manage.py wait_for_db --settings=app.settings
+        & "venv\Scripts\python.exe" manage.py wait_for_db --settings=app.settings
         
         Write-Host "Aplicando migraciones..."
-        python manage.py migrate --settings=app.settings
+        & "venv\Scripts\python.exe" manage.py migrate --settings=app.settings
         
         Write-Host "Recolectando archivos estáticos..."
-        python manage.py collectstatic --noinput --settings=app.settings
+        & "venv\Scripts\python.exe" manage.py collectstatic --noinput --settings=app.settings
         
         Write-Host ""
         Write-Host "DJANGO BACKEND LISTO!"
