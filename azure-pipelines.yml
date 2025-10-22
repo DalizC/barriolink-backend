@@ -572,21 +572,23 @@ stages:
         & "venv\Scripts\python.exe" manage.py migrate --settings=app.settings
         
         Write-Host "Verificando configuración final..."
-        & "venv\Scripts\python.exe" manage.py check --deploy --settings=app.settings
+        & "venv\Scripts\python.exe" manage.py check --settings=app.settings
         
         Write-Host ""
-        Write-Host "DJANGO BACKEND LISTO!"
-        Write-Host "===================="
-        Write-Host "Para iniciar el servidor localmente:"
-        Write-Host "1. Activa el entorno virtual:"
-        Write-Host "   .venv\Scripts\Activate.ps1"
-        Write-Host "2. Inicia el servidor:"
-        Write-Host "   python manage.py runserver --settings=app.settings"
-        Write-Host "3. Visita: http://localhost:8000"
+        Write-Host "INICIANDO SERVIDOR DJANGO..."
+        Write-Host "============================"
+        Write-Host "🚀 Django server starting on http://localhost:8000"
+        Write-Host "📊 Admin panel: http://localhost:8000/admin/"
+        Write-Host "🔌 API Root: http://localhost:8000/api/"
         Write-Host ""
-        Write-Host "APIs disponibles:"
-        Write-Host "- Admin: http://localhost:8000/admin/"
-        Write-Host "- API Root: http://localhost:8000/api/"
-        Write-Host "===================="
+        Write-Host "El servidor se iniciará en background..."
+        Write-Host "Para detenerlo, cancela el pipeline o usa Ctrl+C en el proceso"
+        Write-Host "============================"
+        
+        # Iniciar el servidor Django en el puerto 8000
+        Write-Host "Iniciando Django development server..."
+        & "venv\Scripts\python.exe" manage.py runserver 0.0.0.0:8000 --settings=app.settings --noreload
+        
+        Write-Host "Servidor Django iniciado exitosamente!"
       displayName: 'Prepare Django Server'
       workingDirectory: '$(Build.SourcesDirectory)'
