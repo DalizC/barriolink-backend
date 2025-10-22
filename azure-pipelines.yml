@@ -571,8 +571,8 @@ stages:
         Write-Host "Aplicando migraciones (PostgreSQL)..."
         & "venv\Scripts\python.exe" manage.py migrate --settings=app.settings
         
-        Write-Host "Recolectando archivos estáticos..."
-        & "venv\Scripts\python.exe" manage.py collectstatic --noinput --settings=app.settings
+        Write-Host "Verificando configuración final..."
+        & "venv\Scripts\python.exe" manage.py check --deploy --settings=app.settings
         
         Write-Host ""
         Write-Host "DJANGO BACKEND LISTO!"
