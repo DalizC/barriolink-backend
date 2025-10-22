@@ -491,8 +491,8 @@ stages:
       displayName: 'Run Django Tests'
       workingDirectory: '$(Build.SourcesDirectory)'
 
-  - job: StartServer
-    displayName: 'Start Django Development Server'
+  - job: CreateArtifacts
+    displayName: 'Create Deployment Artifacts'
     dependsOn: [BuildBackend, TestBackend] 
     condition: succeeded()
     steps:
@@ -575,20 +575,63 @@ stages:
         & "venv\Scripts\python.exe" manage.py check --settings=app.settings
         
         Write-Host ""
-        Write-Host "INICIANDO SERVIDOR DJANGO..."
-        Write-Host "============================"
-        Write-Host "🚀 Django server starting on http://localhost:8000"
-        Write-Host "📊 Admin panel: http://localhost:8000/admin/"
-        Write-Host "🔌 API Root: http://localhost:8000/api/"
+        Write-Host "CREANDO ARTEFACTOS PARA DEPLOYMENT..."
+        Write-Host "====================================="
+        
+        # Crear directorio para artefactos
+        New-Item -ItemType Directory -Force -Path "artifacts"
+        
+        # Copiar archivos necesarios para deployment
+        Write-Host "Empaquetando aplicación Django..."
+        Copy-Item -Recurse -Path "app" -Destination "artifacts/"
+        Copy-Item -Recurse -Path "core" -Destination "artifacts/"
+        Copy-Item -Path "manage.py" -Destination "artifacts/"
+        Copy-Item -Path "requirements.txt" -Destination "artifacts/"
+        Copy-Item -Path ".env.development" -Destination "artifacts/.env.example"
+        
+        # Crear script de deployment
+        @"
+@echo off
+echo BARRIOLINK DEPLOYMENT SCRIPT
+echo ============================
+echo.
+echo 1. Install Python dependencies:
+echo    pip install -r requirements.txt
+echo.
+echo 2. Configure environment variables (copy .env.example to .env)
+echo    Set DB_HOST, DB_USER, DB_PASSWORD, SECRET_KEY
+echo.
+echo 3. Run migrations:
+echo    python manage.py migrate --settings=app.settings
+echo.
+echo 4. Start production server (requires gunicorn):
+echo    pip install gunicorn
+echo    gunicorn app.wsgi:application --bind 0.0.0.0:8000
+echo.
+echo 5. Access application:
+echo    http://localhost:8000
+echo    http://localhost:8000/admin/
+echo    http://localhost:8000/api/
+echo.
+pause
+"@ | Out-File -FilePath "artifacts/deploy.bat" -Encoding ASCII
+        
+        Write-Host "✅ Artefactos creados en ./artifacts/"
+        Write-Host "✅ Build completado exitosamente"
         Write-Host ""
-        Write-Host "El servidor se iniciará en background..."
-        Write-Host "Para detenerlo, cancela el pipeline o usa Ctrl+C en el proceso"
-        Write-Host "============================"
-        
-        # Iniciar el servidor Django en el puerto 8000
-        Write-Host "Iniciando Django development server..."
-        & "venv\Scripts\python.exe" manage.py runserver 0.0.0.0:8000 --settings=app.settings --noreload
-        
-        Write-Host "Servidor Django iniciado exitosamente!"
-      displayName: 'Prepare Django Server'
+        Write-Host "PRÓXIMOS PASOS PARA DEPLOYMENT:"
+        Write-Host "==============================="
+        Write-Host "1. 📦 Los artefactos están listos para deployment"
+        Write-Host "2. 🚀 Crear Release Pipeline para deployment automático"
+        Write-Host "3. 🌐 Configurar IIS/Nginx + Gunicorn para producción"
+        Write-Host "4. 🔒 Separar variables por ambiente (Dev/Prod)"
+        Write-Host "==============================="
+      displayName: 'Create Deployment Artifacts'
       workingDirectory: '$(Build.SourcesDirectory)'
+
+    - task: PublishBuildArtifacts@1
+      displayName: 'Publish Django Application Artifacts'
+      inputs:
+        pathToPublish: '$(Build.SourcesDirectory)/artifacts'
+        artifactName: 'barriolink-backend'
+        publishLocation: 'Container'
