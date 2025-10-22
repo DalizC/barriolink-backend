@@ -296,19 +296,68 @@ stages:
         Write-Host "BACKEND BUILD PROCESS"
         Write-Host "====================="
         
-        # Definir la ruta de Python instalado
-        $pythonPath = "C:\Users\dzuri\AppData\Local\Programs\Python\Python312\python.exe"
+        # Buscar Python en múltiples ubicaciones comunes
+        $possiblePaths = @(
+            "C:\Python312\python.exe",
+            "C:\Program Files\Python312\python.exe",
+            "C:\Program Files (x86)\Python312\python.exe",
+            "C:\Users\$env:USERNAME\AppData\Local\Programs\Python\Python312\python.exe",
+            "C:\Users\dzuri\AppData\Local\Programs\Python\Python312\python.exe",
+            "py"
+        )
         
-        Write-Host "Verificando Python en: $pythonPath"
-        & $pythonPath --version
-        & $pythonPath -c "import sys; print(f'Python executable: {sys.executable}')"
+        $pythonPath = $null
+        foreach ($path in $possiblePaths) {
+            Write-Host "Verificando: $path"
+            if ($path -eq "py") {
+                # Verificar si py launcher está disponible
+                try {
+                    $output = & py -3.12 --version 2>$null
+                    if ($LASTEXITCODE -eq 0) {
+                        $pythonPath = "py -3.12"
+                        Write-Host "✓ Encontrado Python Launcher: $output"
+                        break
+                    }
+                } catch {
+                    continue
+                }
+            } else {
+                if (Test-Path $path) {
+                    try {
+                        $output = & $path --version 2>$null
+                        if ($LASTEXITCODE -eq 0) {
+                            $pythonPath = $path
+                            Write-Host "✓ Encontrado Python en: $path - $output"
+                            break
+                        }
+                    } catch {
+                        continue
+                    }
+                }
+            }
+        }
+        
+        if (-not $pythonPath) {
+            Write-Error "No se encontró una instalación válida de Python"
+            Write-Host "Ubicaciones verificadas:"
+            $possiblePaths | ForEach-Object { Write-Host "  - $_" }
+            exit 1
+        }
+        
+        Write-Host "Usando Python: $pythonPath"
         Write-Host ""
         Write-Host "Directorio actual: $(Get-Location)"
         Write-Host "Estructura del proyecto:"
         ls
         
         Write-Host "Creando entorno virtual Python..."
-        & $pythonPath -m venv venv
+        if ($pythonPath -like "py *") {
+            # Usar Python Launcher
+            Invoke-Expression "$pythonPath -m venv venv"
+        } else {
+            # Usar ruta directa
+            & $pythonPath -m venv venv
+        }
         
         Write-Host "Activando entorno virtual..."
         & "venv\Scripts\Activate.ps1"
@@ -348,16 +397,55 @@ stages:
       fetchDepth: 1
 
     - powershell: |
-        # Definir la ruta de Python instalado
-        $pythonPath = "C:\Users\dzuri\AppData\Local\Programs\Python\Python312\python.exe"
-        
         Write-Host "TESTING DJANGO BACKEND"
         Write-Host "======================"
-        Write-Host "Verificando Python disponible..."
-        & $pythonPath --version
+        
+        # Buscar Python (mismo código que en BuildBackend)
+        $possiblePaths = @(
+            "C:\Python312\python.exe",
+            "C:\Program Files\Python312\python.exe", 
+            "C:\Program Files (x86)\Python312\python.exe",
+            "C:\Users\$env:USERNAME\AppData\Local\Programs\Python\Python312\python.exe",
+            "C:\Users\dzuri\AppData\Local\Programs\Python\Python312\python.exe",
+            "py"
+        )
+        
+        $pythonPath = $null
+        foreach ($path in $possiblePaths) {
+            if ($path -eq "py") {
+                try {
+                    $output = & py -3.12 --version 2>$null
+                    if ($LASTEXITCODE -eq 0) {
+                        $pythonPath = "py -3.12"
+                        Write-Host "Usando Python Launcher: $output"
+                        break
+                    }
+                } catch { continue }
+            } else {
+                if (Test-Path $path) {
+                    try {
+                        $output = & $path --version 2>$null
+                        if ($LASTEXITCODE -eq 0) {
+                            $pythonPath = $path
+                            Write-Host "Usando Python: $path - $output"
+                            break
+                        }
+                    } catch { continue }
+                }
+            }
+        }
+        
+        if (-not $pythonPath) {
+            Write-Error "No se encontró Python válido"
+            exit 1
+        }
         
         Write-Host "Recreando entorno virtual..."
-        & $pythonPath -m venv venv
+        if ($pythonPath -like "py *") {
+            Invoke-Expression "$pythonPath -m venv venv"
+        } else {
+            & $pythonPath -m venv venv
+        }
         & "venv\Scripts\Activate.ps1"
         & "venv\Scripts\pip.exe" install --upgrade pip
         & "venv\Scripts\pip.exe" install -r requirements.txt
@@ -387,16 +475,55 @@ stages:
       fetchDepth: 1
 
     - powershell: |
-        # Definir la ruta de Python instalado
-        $pythonPath = "C:\Users\dzuri\AppData\Local\Programs\Python\Python312\python.exe"
-        
         Write-Host "STARTING DJANGO SERVER"
         Write-Host "======================"
-        Write-Host "Verificando Python disponible..."
-        & $pythonPath --version
+        
+        # Buscar Python (mismo código que en BuildBackend)
+        $possiblePaths = @(
+            "C:\Python312\python.exe",
+            "C:\Program Files\Python312\python.exe",
+            "C:\Program Files (x86)\Python312\python.exe", 
+            "C:\Users\$env:USERNAME\AppData\Local\Programs\Python\Python312\python.exe",
+            "C:\Users\dzuri\AppData\Local\Programs\Python\Python312\python.exe",
+            "py"
+        )
+        
+        $pythonPath = $null
+        foreach ($path in $possiblePaths) {
+            if ($path -eq "py") {
+                try {
+                    $output = & py -3.12 --version 2>$null
+                    if ($LASTEXITCODE -eq 0) {
+                        $pythonPath = "py -3.12"
+                        Write-Host "Usando Python Launcher: $output"
+                        break
+                    }
+                } catch { continue }
+            } else {
+                if (Test-Path $path) {
+                    try {
+                        $output = & $path --version 2>$null
+                        if ($LASTEXITCODE -eq 0) {
+                            $pythonPath = $path
+                            Write-Host "Usando Python: $path - $output"
+                            break
+                        }
+                    } catch { continue }
+                }
+            }
+        }
+        
+        if (-not $pythonPath) {
+            Write-Error "No se encontró Python válido"
+            exit 1
+        }
         
         Write-Host "Preparando entorno..."
-        & $pythonPath -m venv venv
+        if ($pythonPath -like "py *") {
+            Invoke-Expression "$pythonPath -m venv venv"
+        } else {
+            & $pythonPath -m venv venv
+        }
         & "venv\Scripts\Activate.ps1"
         & "venv\Scripts\pip.exe" install --upgrade pip
         & "venv\Scripts\pip.exe" install -r requirements.txt
