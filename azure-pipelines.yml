@@ -378,7 +378,17 @@ stages:
         Write-Host "Verificando instalación de Django..."
         & "venv\Scripts\python.exe" -c "import django; print(f'Django {django.get_version()} instalado correctamente')"
         
-        Write-Host "Esperando que la base de datos esté disponible..."
+        Write-Host "Configurando variables de entorno..."
+        $env:DB_HOST = "$(DB_HOST)"
+        $env:DB_NAME = "$(DB_NAME)"
+        $env:DB_USER = "$(DB_USER)"
+        $env:DB_PASSWORD = "$(DB_PASSWORD)"
+        $env:DB_PORT = "$(DB_PORT)"
+        $env:DB_SSLMODE = "$(DB_SSLMODE)"
+        $env:SECRET_KEY = "$(SECRET_KEY)"
+        $env:DEBUG = "$(DEBUG)"
+        
+        Write-Host "Esperando que la base de datos PostgreSQL esté disponible..."
         & "venv\Scripts\python.exe" manage.py wait_for_db --settings=app.settings
         
         Write-Host "Verificando configuración de Django..."
@@ -455,10 +465,20 @@ stages:
         & "venv\Scripts\pip.exe" install --upgrade pip
         & "venv\Scripts\pip.exe" install -r requirements.txt
         
+        Write-Host "Configurando variables de entorno para tests..."
+        $env:DB_HOST = "$(DB_HOST)"
+        $env:DB_NAME = "$(DB_NAME)"
+        $env:DB_USER = "$(DB_USER)"
+        $env:DB_PASSWORD = "$(DB_PASSWORD)"
+        $env:DB_PORT = "$(DB_PORT)"
+        $env:DB_SSLMODE = "$(DB_SSLMODE)"
+        $env:SECRET_KEY = "$(SECRET_KEY)"
+        $env:DEBUG = "$(DEBUG)"
+        
         Write-Host "Esperando que la base de datos esté disponible..."
         & "venv\Scripts\python.exe" manage.py wait_for_db --settings=app.settings
         
-        Write-Host "Ejecutando tests de Django..."
+        Write-Host "Ejecutando tests de Django (con PostgreSQL)..."
         & "venv\Scripts\python.exe" manage.py test --settings=app.settings --verbosity=2
         
         if ($LASTEXITCODE -eq 0) {
@@ -535,10 +555,20 @@ stages:
         & "venv\Scripts\pip.exe" install --upgrade pip
         & "venv\Scripts\pip.exe" install -r requirements.txt
         
+        Write-Host "Configurando variables de entorno..."
+        $env:DB_HOST = "$(DB_HOST)"
+        $env:DB_NAME = "$(DB_NAME)"
+        $env:DB_USER = "$(DB_USER)"
+        $env:DB_PASSWORD = "$(DB_PASSWORD)"
+        $env:DB_PORT = "$(DB_PORT)"
+        $env:DB_SSLMODE = "$(DB_SSLMODE)"
+        $env:SECRET_KEY = "$(SECRET_KEY)"
+        $env:DEBUG = "$(DEBUG)"
+        
         Write-Host "Esperando que la base de datos esté disponible..."
         & "venv\Scripts\python.exe" manage.py wait_for_db --settings=app.settings
         
-        Write-Host "Aplicando migraciones..."
+        Write-Host "Aplicando migraciones (PostgreSQL)..."
         & "venv\Scripts\python.exe" manage.py migrate --settings=app.settings
         
         Write-Host "Recolectando archivos estáticos..."
