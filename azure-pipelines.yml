@@ -590,14 +590,15 @@ stages:
         Copy-Item -Path ".env.development" -Destination "artifacts/.env.example"
         
         # Crear script de deployment
-        @"
+        Write-Host "Creando script de deployment..."
+        $deployScript = @'
 @echo off
 echo BARRIOLINK DEPLOYMENT SCRIPT
 echo ============================
 echo.
 echo 1. Install Python dependencies:
 echo    pip install -r requirements.txt
-echo.
+echo.  
 echo 2. Configure environment variables (copy .env.example to .env)
 echo    Set DB_HOST, DB_USER, DB_PASSWORD, SECRET_KEY
 echo.
@@ -614,7 +615,8 @@ echo    http://localhost:8000/admin/
 echo    http://localhost:8000/api/
 echo.
 pause
-"@ | Out-File -FilePath "artifacts/deploy.bat" -Encoding ASCII
+'@
+        $deployScript | Out-File -FilePath "artifacts/deploy.bat" -Encoding ASCII
         
         Write-Host "✅ Artefactos creados en ./artifacts/"
         Write-Host "✅ Build completado exitosamente"
