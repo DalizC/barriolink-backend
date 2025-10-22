@@ -324,6 +324,9 @@ stages:
         Write-Host "Verificando instalación de Django..."
         python -c "import django; print(f'Django {django.get_version()} instalado correctamente')"
         
+        Write-Host "Esperando que la base de datos esté disponible..."
+        python manage.py wait_for_db --settings=app.settings
+        
         Write-Host "Verificando configuración de Django..."
         python manage.py check --settings=app.settings
         
@@ -357,6 +360,9 @@ stages:
         & "venv\Scripts\Activate.ps1"
         pip install --upgrade pip
         pip install -r requirements.txt
+        
+        Write-Host "Esperando que la base de datos esté disponible..."
+        python manage.py wait_for_db --settings=app.settings
         
         Write-Host "Ejecutando tests de Django..."
         python manage.py test --settings=app.settings --verbosity=2
@@ -394,6 +400,9 @@ stages:
         & "venv\Scripts\Activate.ps1"
         pip install --upgrade pip
         pip install -r requirements.txt
+        
+        Write-Host "Esperando que la base de datos esté disponible..."
+        python manage.py wait_for_db --settings=app.settings
         
         Write-Host "Aplicando migraciones..."
         python manage.py migrate --settings=app.settings
