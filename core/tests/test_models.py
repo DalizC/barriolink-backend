@@ -1,9 +1,13 @@
 """
 Tests para Models.
 """
+from decimal import Decimal
+from datetime import timedelta
 
 from django.test import TestCase
 from django.contrib.auth import get_user_model
+
+from core import models
 
 
 class ModelTests(TestCase):
@@ -46,3 +50,36 @@ class ModelTests(TestCase):
         self.assertTrue(user.check_password('Testpass123'))
         self.assertTrue(user.is_staff)
         self.assertTrue(user.is_superuser)
+
+
+    def test_create_event(self):
+        """Test crear un evento exitosamente."""
+        user = get_user_model().objects.create_user(
+            email='user@example.com',
+            password='Testpass123'
+        )
+        event = models.Event.objects.create(
+            user=user,
+            title='Evento de prueba',
+            description='Descripción del evento de prueba',
+            location='Ubicación del evento',
+            address='Calle Falsa 123',
+            address_url='http://example.com/evento-prueba',
+            date='2025-12-31',
+            duration=timedelta(hours=4, minutes=30),  # 4.5 horas
+        )
+        self.assertEqual(str(event), event.title)
+
+    def test_create_news(self):
+        """Test crear una noticia exitosamente."""
+        user = get_user_model().objects.create_user(
+            email='user@example.com',
+            password='Testpass123'
+        )
+        news = models.News.objects.create(
+            title='Noticia de prueba',
+            content='Contenido de la noticia',
+            author=user,
+            published=True,
+        )
+        self.assertEqual(str(news), news.title)
