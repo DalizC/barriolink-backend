@@ -19,7 +19,7 @@ stages:
         image: postgres:15
         env:
           POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: test_barriolink
+          POSTGRES_DB: test_barriolink-dev
         ports:
           - 5432:5432
         options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
@@ -52,7 +52,7 @@ stages:
         SECRET_KEY: $(SECRET_KEY)
         DEBUG: 'False'
         DJANGO_SETTINGS_MODULE: 'app.settings'
-        DATABASE_URL: 'postgres://postgres:postgres@localhost:5432/test_barriolink'
+        DATABASE_URL: 'postgres://postgres:postgres@localhost:5432/test_barriolink-dev'
         ALLOWED_HOSTS: 'localhost,127.0.0.1'
 
     - task: ArchiveFiles@2
@@ -66,6 +66,43 @@ stages:
 
     - upload: $(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip
       artifact: drop
+
+- stage: DeployDevelopment
+  displayName: 'Deploy to Development'
+  dependsOn: Build
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/develop'))
+  jobs:
+  - deployment: DeployWebDev
+    displayName: 'Deploy Web App Dev'
+    environment: 'development'
+    pool:
+      vmImage: 'ubuntu-latest'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: AzureWebApp@1
+            displayName: 'Deploy Azure Web App Dev'
+            inputs:
+              azureSubscription: 'Azure-BarrioLink'
+              appType: 'webAppLinux'
+              appName: '$(APP_SERVICE_NAME)'
+              package: '$(Pipeline.Workspace)/drop/$(Build.BuildId).zip'
+              runtimeStack: 'PYTHON|3.12'
+              appSettings: |
+                -SECRET_KEY "$(SECRET_KEY)"
+                -DEBUG "True"
+                -DJANGO_SETTINGS_MODULE "app.settings"
+                -DATABASE_URL "$(DATABASE_URL)"
+                -ALLOWED_HOSTS "$(ALLOWED_HOSTS)"
+
+          - task: AzureAppServiceSettings@1
+            displayName: 'Run Django Migrations'
+            inputs:
+              azureSubscription: 'Azure-BarrioLink'
+              appName: '$(APP_SERVICE_NAME)'
+              resourceGroupName: '$(RESOURCE_GROUP_NAME)'
+              appCommandLine: 'python manage.py migrate'
 
 - stage: DeployProduction
   displayName: 'Deploy to Production'
@@ -96,35 +133,10 @@ stages:
                 -DATABASE_URL "$(DATABASE_URL)"
                 -ALLOWED_HOSTS "$(ALLOWED_HOSTS)"
 
-          - script: |
-              echo "Deployment to production completed successfully"
-            displayName: 'Deployment completed'
-
-- stage: DeployDevelopment
-  displayName: 'Deploy to Development'
-  dependsOn: Build
-  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/develop'))
-  jobs:
-  - deployment: DeployWebDev
-    displayName: 'Deploy Web App Dev'
-    environment: 'development'
-    pool:
-      vmImage: 'ubuntu-latest'
-    strategy:
-      runOnce:
-        deploy:
-          steps:
-          - task: AzureWebApp@1
-            displayName: 'Deploy Azure Web App Dev'
+          - task: AzureAppServiceSettings@1
+            displayName: 'Run Django Migrations'
             inputs:
               azureSubscription: 'Azure-BarrioLink'
-              appType: 'webAppLinux'
-              appName: '$(APP_SERVICE_NAME_DEV)'
-              package: '$(Pipeline.Workspace)/drop/$(Build.BuildId).zip'
-              runtimeStack: 'PYTHON|3.12'
-              appSettings: |
-                -SECRET_KEY "$(SECRET_KEY)"
-                -DEBUG "True"
-                -DJANGO_SETTINGS_MODULE "app.settings"
-                -DATABASE_URL "$(DATABASE_URL_DEV)"
-                -ALLOWED_HOSTS "$(ALLOWED_HOSTS_DEV)"
+              appName: '$(APP_SERVICE_NAME)'
+              resourceGroupName: '$(RESOURCE_GROUP_NAME)'
+              appCommandLine: 'python manage.py migrate'
