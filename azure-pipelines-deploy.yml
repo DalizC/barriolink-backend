@@ -54,12 +54,6 @@ stages:
         DJANGO_SETTINGS_MODULE: 'app.settings'
         DATABASE_URL: 'postgres://postgres:postgres@localhost:5432/test_barriolink'
         ALLOWED_HOSTS: 'localhost,127.0.0.1'
-      env:
-        SECRET_KEY: $(SECRET_KEY)
-        DEBUG: 'False'
-        DJANGO_SETTINGS_MODULE: 'app.settings'
-        DATABASE_URL: $(DATABASE_URL)
-        ALLOWED_HOSTS: $(ALLOWED_HOSTS)
 
     - task: ArchiveFiles@2
       displayName: 'Archive files'
