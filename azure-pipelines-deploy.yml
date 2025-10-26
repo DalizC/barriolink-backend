@@ -1,0 +1,130 @@
+trigger:
+- main
+- develop
+
+variables:
+  pythonVersion: '3.12'
+
+stages:
+- stage: Build
+  displayName: 'Build and Test'
+  jobs:
+  - job: BuildJob
+    displayName: 'Build Job'
+    pool:
+      vmImage: 'ubuntu-latest'
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test_barriolink
+        ports:
+          - 5432:5432
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+
+    steps:
+    - task: UsePythonVersion@0
+      inputs:
+        versionSpec: '$(pythonVersion)'
+      displayName: 'Use Python $(pythonVersion)'
+
+    - script: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+      displayName: 'Install dependencies'
+
+    - script: |
+        python manage.py check
+      displayName: 'Django check'
+      env:
+        SECRET_KEY: $(SECRET_KEY)
+        DEBUG: 'False'
+        DJANGO_SETTINGS_MODULE: 'app.settings'
+        DATABASE_URL: 'postgres://postgres:postgres@localhost:5432/test_barriolink-dev'
+        ALLOWED_HOSTS: 'localhost,127.0.0.1'
+
+    - script: |
+        python manage.py test --keepdb
+      displayName: 'Run tests'
+      env:
+        SECRET_KEY: $(SECRET_KEY)
+        DEBUG: 'False'
+        DJANGO_SETTINGS_MODULE: 'app.settings'
+        DATABASE_URL: 'postgres://postgres:postgres@localhost:5432/test_barriolink'
+        ALLOWED_HOSTS: 'localhost,127.0.0.1'
+
+    - task: ArchiveFiles@2
+      displayName: 'Archive files'
+      inputs:
+        rootFolderOrFile: '$(System.DefaultWorkingDirectory)'
+        includeRootFolder: false
+        archiveType: zip
+        archiveFile: $(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip
+        replaceExistingArchive: true
+
+    - upload: $(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip
+      artifact: drop
+
+- stage: DeployProduction
+  displayName: 'Deploy to Production'
+  dependsOn: Build
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+  jobs:
+  - deployment: DeployWeb
+    displayName: 'Deploy Web App'
+    environment: 'production'
+    pool:
+      vmImage: 'ubuntu-latest'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: AzureWebApp@1
+            displayName: 'Deploy Azure Web App'
+            inputs:
+              azureSubscription: 'Azure-BarrioLink'
+              appType: 'webAppLinux'
+              appName: '$(APP_SERVICE_NAME)'
+              package: '$(Pipeline.Workspace)/drop/$(Build.BuildId).zip'
+              runtimeStack: 'PYTHON|3.12'
+              appSettings: |
+                -SECRET_KEY "$(SECRET_KEY)"
+                -DEBUG "False"
+                -DJANGO_SETTINGS_MODULE "app.settings"
+                -DATABASE_URL "$(DATABASE_URL)"
+                -ALLOWED_HOSTS "$(ALLOWED_HOSTS)"
+
+          - script: |
+              echo "Deployment to production completed successfully"
+            displayName: 'Deployment completed'
+
+- stage: DeployDevelopment
+  displayName: 'Deploy to Development'
+  dependsOn: Build
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/develop'))
+  jobs:
+  - deployment: DeployWebDev
+    displayName: 'Deploy Web App Dev'
+    environment: 'development'
+    pool:
+      vmImage: 'ubuntu-latest'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: AzureWebApp@1
+            displayName: 'Deploy Azure Web App Dev'
+            inputs:
+              azureSubscription: 'Azure-BarrioLink'
+              appType: 'webAppLinux'
+              appName: '$(APP_SERVICE_NAME_DEV)'
+              package: '$(Pipeline.Workspace)/drop/$(Build.BuildId).zip'
+              runtimeStack: 'PYTHON|3.12'
+              appSettings: |
+                -SECRET_KEY "$(SECRET_KEY)"
+                -DEBUG "True"
+                -DJANGO_SETTINGS_MODULE "app.settings"
+                -DATABASE_URL "$(DATABASE_URL_DEV)"
+                -ALLOWED_HOSTS "$(ALLOWED_HOSTS_DEV)"

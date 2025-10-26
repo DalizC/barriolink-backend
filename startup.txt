@@ -1,0 +1,8 @@
+# Ejecutar migraciones
+python manage.py migrate --noinput
+
+# Recopilar archivos estáticos
+python manage.py collectstatic --noinput
+
+# Iniciar servidor Gunicorn
+gunicorn --bind=0.0.0.0 --timeout 600 app.wsgi:application
