@@ -1,613 +1,76 @@
-# ===================================
-# AZURE REPOS -> GITHUB MIRROR PIPELINE
-# ===================================
-# Mantiene sincronizados Azure Repos y GitHub
-# Triggers en ramas principales y features
+# Starter pipeline
+# Start with a minimal pipeline that you can customize to build and deploy your code.
+# Add steps that build, run tests, deploy, and more:
+# https://aka.ms/yaml
 
-name: 'Mirror-$(Date:yyyyMMdd)$(Rev:.r)'
-
-# Trigger: Se ejecuta cuando hay push a estas ramas
+# Azure Repos -> GitHub sync, por rama que dispara el build (sin force)
 trigger:
   branches:
-    include: 
-      - main
-      - develop
-      - release/*
-      - feature/*
-  paths:
-    exclude:
-      - README.md
-      - docs/*
-      - '*.md'
+    include: [ main, develop, release/*, feature/* ]
+  tags:
+    include: [ 'v*' ]
+pr: none
 
-# Pull Request: También sincroniza en PRs
-pr:
-  branches:
-    include: 
-      - main
-      - develop
-  paths:
-    exclude:
-      - README.md
-      - docs/*
-      - '*.md'
+pool:
+  name: home-office   # tu agente self-hosted
 
-# Variables del pipeline
 variables:
-  - name: shouldMirror
-    value: true
-  - name: maxRetries
-    value: 3
-  - name: shouldDeploy
-    value: true
+  GITHUB_OWNER: $(GITHUB_USER)
+  GITHUB_REPO: barriolink-backend
 
-pool: 
-  name: home-office
+steps:
+- checkout: self
+  fetchDepth: 0
 
-stages:
-- stage: ValidateAndMirror
-  displayName: 'Validate and Mirror to GitHub'
-  
-  jobs:
-  - job: PreValidation
-    displayName: 'Pre-validation Checks'
-    steps:
-    - checkout: self
-      fetchDepth: 0
-      displayName: 'Checkout with full history'
+- powershell: |
+    $ErrorActionPreference = 'Stop'
+    Set-StrictMode -Version Latest
 
-    - powershell: |
-        Write-Host "=== PIPELINE INFORMATION ==="
-        Write-Host "Source Branch: $(Build.SourceBranch)"
-        Write-Host "Branch Name: $(Build.SourceBranchName)"
-        Write-Host "Repository: $(Build.Repository.Name)"
-        Write-Host "Commit: $(Build.SourceVersion)"
-        Write-Host "Trigger Reason: $(Build.Reason)"
-        Write-Host "================================"
-        
-        # Verificar que las variables estén configuradas
-        if (-not $env:GITHUB_USER -or -not $env:GITHUB_PAT -or -not $env:GITHUB_OWNER -or -not $env:GITHUB_REPO) {
-            Write-Error "Variables de GitHub no configuradas correctamente"
-            Write-Host "Variables necesarias: GITHUB_USER, GITHUB_PAT, GITHUB_OWNER, GITHUB_REPO"
-            exit 1
-        }
-        Write-Host "Variables de GitHub configuradas correctamente"
-      displayName: 'Display Build Information'
-      env:
-        GITHUB_USER: $(GITHUB_USER)
-        GITHUB_PAT: $(GITHUB_PAT)
-        GITHUB_OWNER: $(GITHUB_OWNER)
-        GITHUB_REPO: $(GITHUB_REPO)
+    $ref     = $env:BUILD_SOURCEBRANCH
+    $refName = $env:BUILD_SOURCEBRANCHNAME
+    $isTag   = $ref.StartsWith('refs/tags/')
+    $isBranch= $ref.StartsWith('refs/heads/')
 
-  - job: MirrorToGitHub
-    displayName: 'Mirror Repository to GitHub'
-    dependsOn: PreValidation
-    condition: and(succeeded(), eq(variables.shouldMirror, 'true'))
-    
-    steps:
-    - checkout: self
-      fetchDepth: 0
-      displayName: 'Checkout with full history'
+    git --version
+    git config user.name  "ci-mirror"
+    git config user.email "ci-mirror@example.com"
+    git config --global credential.helper ""
 
-    - powershell: |
-        $ErrorActionPreference = 'Continue'  # Cambiado para manejar errores manualmente
-        
-        Write-Host "Configurando Git..."
-        git config user.name "Azure DevOps Mirror"
-        git config user.email "azuredevops-mirror@barriolink.com"
-        git config core.autocrlf false
-        git config push.default current
-        
-        Write-Host "Información del repositorio:"
-        git log --oneline -5
-        Write-Host "Rama actual: $(git branch --show-current)"
-        Write-Host "Ramas disponibles:"
-        git branch -a
-        
-        Write-Host "Configurando remote GitHub..."
-        $remoteUrl = "https://$(GITHUB_USER):$(GITHUB_PAT)@github.com/$(GITHUB_OWNER)/$(GITHUB_REPO).git"
-        
-        # Verificar remotes existentes
-        Write-Host "Remotes actuales:"
-        git remote -v
-        
-        # Verificar si el remote github ya existe (manejo de errores manual)
-        git remote get-url github 2>$null
-        $remoteExists = $LASTEXITCODE -eq 0
-        
-        if ($remoteExists) {
-            Write-Host "Remote 'github' ya existe, actualizando URL..."
-            git remote set-url github $remoteUrl
-        } else {
-            Write-Host "Agregando nuevo remote 'github'..."
-            git remote add github $remoteUrl
-        }
-        
-        Write-Host "Remotes después de configuración:"
-        git remote -v
-        
-        Write-Host "Verificando conectividad con GitHub..."
-        git ls-remote github HEAD 2>&1
-        if ($LASTEXITCODE -ne 0) {
-            Write-Error "No se puede conectar a GitHub. Verificar credenciales y configuración."
-            Write-Host "Debugging: Verificar GITHUB_USER, GITHUB_PAT, GITHUB_OWNER, GITHUB_REPO"
-            exit 1
-        }
-        Write-Host "Conexión a GitHub exitosa"
-        
-      displayName: 'Configure Git and GitHub Remote'
-      env:
-        GITHUB_USER: $(GITHUB_USER)
-        GITHUB_PAT: $(GITHUB_PAT)
-        GITHUB_OWNER: $(GITHUB_OWNER)
-        GITHUB_REPO: $(GITHUB_REPO)
+    # Eliminar remoto 'github' solo si existe (evita fallo)
+    $hasGithub = git remote | Select-String -Pattern '^github$' -Quiet
+    if ($hasGithub) { git remote remove github }
 
-    - powershell: |
-        $ErrorActionPreference = 'Continue'  # Manejo manual de errores
-        
-        # Obtener el nombre completo de la rama desde Build.SourceBranch
-        $sourceBranch = "$(Build.SourceBranch)"
-        $branch = $sourceBranch -replace "refs/heads/", ""
-        
-        Write-Host "Source Branch: $sourceBranch"
-        Write-Host "Rama extraída: $branch"
-        
-        $maxRetries = $(maxRetries)
-        $retryCount = 0
-        $success = $false
-        
-        Write-Host "Iniciando mirror de la rama: $branch"
-        Write-Host "Target: $(GITHUB_OWNER)/$(GITHUB_REPO)"
-        
-        # Verificar estado actual del repositorio
-        Write-Host "Estado actual del repositorio:"
-        Write-Host "Rama local actual: $(git branch --show-current)"
-        Write-Host "Commit actual: $(git rev-parse HEAD)"
-        
-        # Verificar si la rama existe en GitHub (sin hacer fetch todavía)
-        Write-Host "Verificando si la rama '$branch' existe en GitHub..."
-        git ls-remote --heads github $branch 2>&1
-        $branchExistsOnGitHub = $LASTEXITCODE -eq 0
-        
-        if ($branchExistsOnGitHub) {
-            Write-Host "La rama '$branch' ya existe en GitHub"
-        } else {
-            Write-Host "La rama '$branch' NO existe en GitHub - se creará automáticamente"
-        }
-        
-        while (-not $success -and $retryCount -lt $maxRetries) {
-            $retryCount++
-            Write-Host "Intento $retryCount de $maxRetries"
-            
-            try {
-                # Simplificar: siempre hacer fetch general primero
-                Write-Host "Obteniendo referencias de GitHub..."
-                git fetch github 2>&1
-                
-                if ($branchExistsOnGitHub) {
-                    Write-Host "La rama '$branch' existe en GitHub, sincronizando..."
-                    
-                    # Obtener commits para comparar
-                    $localCommit = git rev-parse HEAD
-                    $remoteCommit = git rev-parse "github/$branch" 2>$null
-                    
-                    Write-Host "Local:  $localCommit"
-                    Write-Host "Remoto: $remoteCommit"
-                    
-                    if ($localCommit -eq $remoteCommit) {
-                        Write-Host "Las ramas están sincronizadas, no hay cambios que enviar"
-                        $success = $true
-                    } else {
-                        Write-Host "Push con --force-with-lease para seguridad..."
-                        git push github "HEAD:$branch" --force-with-lease 2>&1
-                    }
-                } else {
-                    # Si la rama no existe, crearla directamente
-                    Write-Host "Creando nueva rama '$branch' en GitHub..."
-                    git push github "HEAD:$branch" 2>&1
-                }
-                
-                if ($LASTEXITCODE -eq 0) {
-                    Write-Host "Mirror exitoso para la rama '$branch'"
-                    $success = $true
-                    
-                    # Verificar que el push fue exitoso
-                    Write-Host "Verificando el push..."
-                    git ls-remote --heads github $branch 2>&1
-                    if ($LASTEXITCODE -eq 0) {
-                        Write-Host "Verificación exitosa - rama sincronizada correctamente"
-                    }
-                } else {
-                    throw "Git push falló con código $LASTEXITCODE"
-                }
-            }
-            catch {
-                Write-Warning "Intento $retryCount falló: $($_.Exception.Message)"
-                if ($retryCount -lt $maxRetries) {
-                    Write-Host "Esperando 10 segundos antes del siguiente intento..."
-                    Start-Sleep -Seconds 10
-                    
-                    # Re-verificar si la rama ahora existe (por si otro proceso la creó)
-                    git ls-remote --heads github $branch 2>&1
-                    $branchExistsOnGitHub = $LASTEXITCODE -eq 0
-                } else {
-                    Write-Error "Todos los intentos de mirror fallaron"
-                    Write-Host "Información de debugging:"
-                    Write-Host "- Rama: $branch"
-                    Write-Host "- GitHub Owner: $(GITHUB_OWNER)"
-                    Write-Host "- GitHub Repo: $(GITHUB_REPO)"
-                    Write-Host "- Último error: $($_.Exception.Message)"
-                    exit 1
-                }
-            }
-        }
-        
-        Write-Host "Mirror completado exitosamente!"
-        Write-Host "URL: https://github.com/$(GITHUB_OWNER)/$(GITHUB_REPO)/tree/$branch"
-        
-      displayName: 'Push to GitHub with Retry Logic'
-      env:
-        GITHUB_OWNER: $(GITHUB_OWNER)
-        GITHUB_REPO: $(GITHUB_REPO)
+    $remote = "https://$(GITHUB_USER):$(GITHUB_PAT)@github.com/$(GITHUB_OWNER)/$(GITHUB_REPO).git"
+    git remote add github $remote
+    git remote -v
 
-    - powershell: |
-        # Obtener el nombre completo de la rama
-        $sourceBranch = "$(Build.SourceBranch)"
-        $branch = $sourceBranch -replace "refs/heads/", ""
-        
-        Write-Host "RESUMEN DEL MIRROR"
-        Write-Host "====================="
-        Write-Host "Rama sincronizada: $branch"
-        Write-Host "Commit: $(Build.SourceVersion)"
-        Write-Host "Build: $(Build.BuildNumber)"
-        Write-Host "Hora: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
-        Write-Host "GitHub: https://github.com/$(GITHUB_OWNER)/$(GITHUB_REPO)"
-        Write-Host "Rama: https://github.com/$(GITHUB_OWNER)/$(GITHUB_REPO)/tree/$branch"
-        Write-Host "====================="
-        
-        # Verificación final de sincronización
-        Write-Host "Verificación final..."
-        git ls-remote --heads github $branch 2>&1
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host "Sincronización confirmada - rama disponible en GitHub"
-        } else {
-            Write-Warning "No se pudo verificar la sincronización"
-        }
-      displayName: 'Mirror Summary'
-      env:
-        GITHUB_OWNER: $(GITHUB_OWNER)
-        GITHUB_REPO: $(GITHUB_REPO)
-      condition: always()
+    git fetch --all --tags
 
-- stage: BuildAndTest
-  displayName: 'Build and Test Django Backend'
-  dependsOn: ValidateAndMirror
-  condition: and(succeeded(), eq(variables.shouldDeploy, 'true'))
-  
-  jobs:
-  - job: BuildBackend
-    displayName: 'Setup Django Backend'
-    steps:
-    - checkout: self
-      fetchDepth: 1
-      displayName: 'Checkout source code'
+    if ($isBranch) {
+      Write-Host "== Sincronizando rama '$refName' a GitHub (sin force)"
+      git push github HEAD:refs/heads/$refName
+      if ($LASTEXITCODE -ne 0) { throw "Push a rama '$refName' falló. ¿Historia divergente o branch protection?" }
 
-    - powershell: |
-        Write-Host "BACKEND BUILD PROCESS"
-        Write-Host "====================="
-        
-        # Buscar Python en múltiples ubicaciones comunes (priorizando instalaciones directas)
-        $possiblePaths = @(
-            "C:\Python312\python.exe",
-            "C:\Program Files\Python312\python.exe", 
-            "C:\Program Files (x86)\Python312\python.exe",
-            "C:\Users\$env:USERNAME\AppData\Local\Programs\Python\Python312\python.exe",
-            "C:\Users\dzuri\AppData\Local\Programs\Python\Python312\python.exe",
-            "C:\Python311\python.exe",
-            "C:\Program Files\Python311\python.exe",
-            "py"
-        )
-        
-        $pythonPath = $null
-        foreach ($path in $possiblePaths) {
-            Write-Host "Verificando: $path"
-            if ($path -eq "py") {
-                # Verificar si py launcher está disponible
-                try {
-                    $output = & py -3.12 --version 2>$null
-                    if ($LASTEXITCODE -eq 0) {
-                        $pythonPath = "py -3.12"
-                        Write-Host "✓ Encontrado Python Launcher: $output"
-                        break
-                    }
-                } catch {
-                    continue
-                }
-            } else {
-                if (Test-Path $path) {
-                    try {
-                        $output = & $path --version 2>$null
-                        if ($LASTEXITCODE -eq 0) {
-                            $pythonPath = $path
-                            Write-Host "✓ Encontrado Python en: $path - $output"
-                            break
-                        }
-                    } catch {
-                        continue
-                    }
-                }
-            }
-        }
-        
-        if (-not $pythonPath) {
-            Write-Error "No se encontró una instalación válida de Python"
-            Write-Host "Ubicaciones verificadas:"
-            $possiblePaths | ForEach-Object { Write-Host "  - $_" }
-            exit 1
-        }
-        
-        Write-Host "Usando Python: $pythonPath"
-        Write-Host ""
-        Write-Host "Directorio actual: $(Get-Location)"
-        Write-Host "Estructura del proyecto:"
-        ls
-        
-        Write-Host "Creando entorno virtual Python..."
-        if ($pythonPath -like "py *") {
-            # Usar Python Launcher con workaround para bibliotecas
-            Write-Host "Usando Python Launcher con configuración específica..."
-            py -3.12 -m venv venv --copies
-        } else {
-            # Usar ruta directa
-            & $pythonPath -m venv venv
-        }
-        
-        Write-Host "Activando entorno virtual..."
-        & "venv\Scripts\Activate.ps1"
-        
-        Write-Host "Verificando Python y pip del venv..."
-        & "venv\Scripts\python.exe" --version
-        & "venv\Scripts\pip.exe" --version
-        
-        Write-Host "Actualizando pip..."
-        & "venv\Scripts\python.exe" -m pip install --upgrade pip
-        
-        Write-Host "Instalando dependencias de Django..."
-        & "venv\Scripts\pip.exe" install -r requirements.txt
-        
-        Write-Host "Verificando instalación de Django..."
-        & "venv\Scripts\python.exe" -c "import django; print(f'Django {django.get_version()} instalado correctamente')"
-        
-        Write-Host "Configurando variables de entorno..."
-        $env:DB_HOST = "$(DB_HOST)"
-        $env:DB_NAME = "$(DB_NAME)"
-        $env:DB_USER = "$(DB_USER)"
-        $env:DB_PASSWORD = "$(DB_PASSWORD)"
-        $env:DB_PORT = "$(DB_PORT)"
-        $env:DB_SSLMODE = "$(DB_SSLMODE)"
-        $env:SECRET_KEY = "$(SECRET_KEY)"
-        $env:DEBUG = "$(DEBUG)"
-        
-        Write-Host "Esperando que la base de datos PostgreSQL esté disponible..."
-        & "venv\Scripts\python.exe" manage.py wait_for_db --settings=app.settings
-        
-        Write-Host "Verificando configuración de Django..."
-        & "venv\Scripts\python.exe" manage.py check --settings=app.settings
-        
-        Write-Host "Ejecutando migraciones (dry-run)..."
-        & "venv\Scripts\python.exe" manage.py makemigrations --dry-run --settings=app.settings
-        
-        Write-Host "BACKEND CONFIGURADO EXITOSAMENTE"
-        Write-Host "================================="
-      displayName: 'Setup Django Environment'
-      workingDirectory: '$(Build.SourcesDirectory)'
+      git push github --tags
+      if ($LASTEXITCODE -ne 0) { throw "Push de tags falló." }
 
-  - job: TestBackend  
-    displayName: 'Run Django Tests'
-    dependsOn: BuildBackend
-    steps:
-    - checkout: self
-      fetchDepth: 1
+      $localSha  = (git rev-parse HEAD)
+      $remoteSha = (git ls-remote github "refs/heads/$refName" | ForEach-Object { $_.Split("`t")[0] })
+      Write-Host "Local:  $localSha"
+      Write-Host "Remote: $remoteSha"
+      if (-not $remoteSha -or $remoteSha -ne $localSha) { throw "El commit remoto no coincide tras el push." }
+      Write-Host "OK: rama '$refName' sincronizada."
+    }
+    elseif ($isTag) {
+      Write-Host "== Sincronizando tag '$refName' a GitHub"
+      git push github "refs/tags/$refName"
+      if ($LASTEXITCODE -ne 0) { throw "Push del tag '$refName' falló." }
 
-    - powershell: |
-        Write-Host "TESTING DJANGO BACKEND"
-        Write-Host "======================"
-        
-        # Buscar Python (mismo código que en BuildBackend)
-        $possiblePaths = @(
-            "C:\Python312\python.exe",
-            "C:\Program Files\Python312\python.exe", 
-            "C:\Program Files (x86)\Python312\python.exe",
-            "C:\Users\$env:USERNAME\AppData\Local\Programs\Python\Python312\python.exe",
-            "C:\Users\dzuri\AppData\Local\Programs\Python\Python312\python.exe",
-            "C:\Python311\python.exe",
-            "C:\Program Files\Python311\python.exe",
-            "py"
-        )
-        
-        $pythonPath = $null
-        foreach ($path in $possiblePaths) {
-            if ($path -eq "py") {
-                try {
-                    $output = & py -3.12 --version 2>$null
-                    if ($LASTEXITCODE -eq 0) {
-                        $pythonPath = "py -3.12"
-                        Write-Host "Usando Python Launcher: $output"
-                        break
-                    }
-                } catch { continue }
-            } else {
-                if (Test-Path $path) {
-                    try {
-                        $output = & $path --version 2>$null
-                        if ($LASTEXITCODE -eq 0) {
-                            $pythonPath = $path
-                            Write-Host "Usando Python: $path - $output"
-                            break
-                        }
-                    } catch { continue }
-                }
-            }
-        }
-        
-        if (-not $pythonPath) {
-            Write-Error "No se encontró Python válido"
-            exit 1
-        }
-        
-        Write-Host "Recreando entorno virtual..."
-        if ($pythonPath -like "py *") {
-            py -3.12 -m venv venv --copies
-        } else {
-            & $pythonPath -m venv venv
-        }
-        & "venv\Scripts\Activate.ps1"
-        & "venv\Scripts\pip.exe" install --upgrade pip
-        & "venv\Scripts\pip.exe" install -r requirements.txt
-        
-        Write-Host "Configurando variables de entorno para tests..."
-        $env:DB_HOST = "$(DB_HOST)"
-        $env:DB_NAME = "$(DB_NAME)"
-        $env:DB_USER = "$(DB_USER)"
-        $env:DB_PASSWORD = "$(DB_PASSWORD)"
-        $env:DB_PORT = "$(DB_PORT)"
-        $env:DB_SSLMODE = "$(DB_SSLMODE)"
-        $env:SECRET_KEY = "$(SECRET_KEY)"
-        $env:DEBUG = "$(DEBUG)"
-        
-        Write-Host "Esperando que la base de datos esté disponible..."
-        & "venv\Scripts\python.exe" manage.py wait_for_db --settings=app.settings
-        
-        Write-Host "Ejecutando tests de Django (con PostgreSQL)..."
-        & "venv\Scripts\python.exe" manage.py test --settings=app.settings --verbosity=2
-        
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host "TESTS PASARON EXITOSAMENTE"
-            Write-Host "=========================="
-        } else {
-            Write-Error "Algunos tests fallaron"
-            exit 1
-        }
-      displayName: 'Run Django Tests'
-      workingDirectory: '$(Build.SourcesDirectory)'
-
-  - job: CreateArtifacts
-    displayName: 'Create Deployment Artifacts'
-    dependsOn: [BuildBackend, TestBackend] 
-    condition: succeeded()
-    steps:
-    - checkout: self
-      fetchDepth: 1
-
-    - powershell: |
-        Write-Host "STARTING DJANGO SERVER"
-        Write-Host "======================"
-        
-        # Buscar Python (mismo código que en BuildBackend)
-        $possiblePaths = @(
-            "C:\Python312\python.exe",
-            "C:\Program Files\Python312\python.exe",
-            "C:\Program Files (x86)\Python312\python.exe", 
-            "C:\Users\$env:USERNAME\AppData\Local\Programs\Python\Python312\python.exe",
-            "C:\Users\dzuri\AppData\Local\Programs\Python\Python312\python.exe",
-            "C:\Python311\python.exe",
-            "C:\Program Files\Python311\python.exe",
-            "py"
-        )
-        
-        $pythonPath = $null
-        foreach ($path in $possiblePaths) {
-            if ($path -eq "py") {
-                try {
-                    $output = & py -3.12 --version 2>$null
-                    if ($LASTEXITCODE -eq 0) {
-                        $pythonPath = "py -3.12"
-                        Write-Host "Usando Python Launcher: $output"
-                        break
-                    }
-                } catch { continue }
-            } else {
-                if (Test-Path $path) {
-                    try {
-                        $output = & $path --version 2>$null
-                        if ($LASTEXITCODE -eq 0) {
-                            $pythonPath = $path
-                            Write-Host "Usando Python: $path - $output"
-                            break
-                        }
-                    } catch { continue }
-                }
-            }
-        }
-        
-        if (-not $pythonPath) {
-            Write-Error "No se encontró Python válido"
-            exit 1
-        }
-        
-        Write-Host "Preparando entorno..."
-        if ($pythonPath -like "py *") {
-            py -3.12 -m venv venv --copies
-        } else {
-            & $pythonPath -m venv venv
-        }
-        & "venv\Scripts\Activate.ps1"
-        & "venv\Scripts\pip.exe" install --upgrade pip
-        & "venv\Scripts\pip.exe" install -r requirements.txt
-        
-        Write-Host "Configurando variables de entorno..."
-        $env:DB_HOST = "$(DB_HOST)"
-        $env:DB_NAME = "$(DB_NAME)"
-        $env:DB_USER = "$(DB_USER)"
-        $env:DB_PASSWORD = "$(DB_PASSWORD)"
-        $env:DB_PORT = "$(DB_PORT)"
-        $env:DB_SSLMODE = "$(DB_SSLMODE)"
-        $env:SECRET_KEY = "$(SECRET_KEY)"
-        $env:DEBUG = "$(DEBUG)"
-        
-        Write-Host "Esperando que la base de datos esté disponible..."
-        & "venv\Scripts\python.exe" manage.py wait_for_db --settings=app.settings
-        
-        Write-Host "Verificando configuración de Django..."
-        & "venv\Scripts\python.exe" manage.py check --settings=app.settings
-        
-        Write-Host ""
-        Write-Host "CREANDO ARTEFACTOS PARA DEPLOYMENT..."
-        Write-Host "====================================="
-        
-        # Crear directorio para artefactos
-        New-Item -ItemType Directory -Force -Path "artifacts"
-        
-        # Copiar archivos necesarios para deployment
-        Write-Host "Empaquetando aplicación Django..."
-        Copy-Item -Recurse -Path "app" -Destination "artifacts/"
-        Copy-Item -Recurse -Path "core" -Destination "artifacts/"
-        Copy-Item -Path "manage.py" -Destination "artifacts/"
-        Copy-Item -Path "requirements.txt" -Destination "artifacts/"
-        
-        # Crear script de deployment básico
-        Write-Host "Creando script de deployment..."
-        "echo BARRIOLINK DEPLOYMENT SCRIPT" | Out-File -FilePath "artifacts/deploy.bat" -Encoding ASCII
-        "echo pip install -r requirements.txt" | Out-File -FilePath "artifacts/deploy.bat" -Encoding ASCII -Append
-        "echo python manage.py migrate --settings=app.settings" | Out-File -FilePath "artifacts/deploy.bat" -Encoding ASCII -Append
-        "echo gunicorn app.wsgi:application --bind 0.0.0.0:8000" | Out-File -FilePath "artifacts/deploy.bat" -Encoding ASCII -Append
-        
-        Write-Host " Artefactos creados en ./artifacts/"
-        Write-Host " Build completado exitosamente"
-        Write-Host ""
-        Write-Host "PRÓXIMOS PASOS PARA DEPLOYMENT:"
-        Write-Host "==============================="
-        Write-Host "1. Los artefactos están listos para deployment"
-        Write-Host "2. Crear Release Pipeline para deployment automático"
-        Write-Host "3. Configurar IIS/Nginx + Gunicorn para producción"
-        Write-Host "4. Separar variables por ambiente (Dev/Prod)"
-        Write-Host "==============================="
-      displayName: 'Create Deployment Artifacts'
-      workingDirectory: '$(Build.SourcesDirectory)'
-
-    - task: PublishBuildArtifacts@1
-      displayName: 'Publish Django Application Artifacts'
-      inputs:
-        pathToPublish: '$(Build.SourcesDirectory)/artifacts'
-        artifactName: 'barriolink-backend'
-        publishLocation: 'Container'
+      $remoteTag = (git ls-remote --tags github "refs/tags/$refName" | ForEach-Object { $_.Split("`t")[0] })
+      if (-not $remoteTag) { throw "El tag '$refName' no quedó en GitHub tras el push." }
+      Write-Host "OK: tag '$refName' sincronizado."
+    }
+    else {
+      throw "Tipo de ref no soportado: $ref"
+    }
+  displayName: 'Sync Azure → GitHub (rama actual + tags)'
