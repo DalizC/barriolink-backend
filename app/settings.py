@@ -113,6 +113,11 @@ if DATABASE_URL:
     DATABASES = {
         'default': dj_database_url.parse(DATABASE_URL)
     }
+    # Asegurar que use psycopg3 en lugar de psycopg2
+    DATABASES['default']['OPTIONS'] = DATABASES['default'].get('OPTIONS', {})
+    DATABASES['default']['OPTIONS'].update({
+        'options': '-c default_transaction_isolation=read_committed'
+    })
 else:
     # Fallback a variables individuales para desarrollo local
     DATABASES = {
@@ -128,6 +133,16 @@ else:
             }
         }
     }
+
+# Forzar el uso de psycopg3 para todas las conexiones
+import django.db.backends.postgresql.base as postgresql_base
+try:
+    import psycopg as Database
+    postgresql_base.Database = Database
+except ImportError:
+    # Fallback a psycopg2 si psycopg no está disponible
+    import psycopg2 as Database
+    postgresql_base.Database = Database
 
 
 # Password validation
