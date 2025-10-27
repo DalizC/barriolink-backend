@@ -66,9 +66,16 @@ stages:
 
         # Crear script de startup que use las dependencias locales
         echo '#!/bin/bash' > startup.sh
+        echo 'echo "=== STARTUP SCRIPT INICIANDO ==="' >> startup.sh
         echo 'export PYTHONPATH="/home/site/wwwroot/packages:$PYTHONPATH"' >> startup.sh
+        echo 'echo "PYTHONPATH configurado: $PYTHONPATH"' >> startup.sh
+        echo 'echo "PORT configurado: ${PORT:-8000}"' >> startup.sh
         echo 'cd /home/site/wwwroot' >> startup.sh
-        echo 'python -m gunicorn app.wsgi --bind=0.0.0.0:8000' >> startup.sh
+        echo 'echo "Directorio actual: $(pwd)"' >> startup.sh
+        echo 'echo "Verificando Django..."' >> startup.sh
+        echo 'python -c "import django; print(f\"Django version: {django.VERSION}\")"' >> startup.sh
+        echo 'echo "Iniciando gunicorn..."' >> startup.sh
+        echo 'python -m gunicorn app.wsgi --bind=0.0.0.0:${PORT:-8000} --log-level debug' >> startup.sh
         chmod +x startup.sh
 
         echo "Package prepared with pre-installed dependencies"
