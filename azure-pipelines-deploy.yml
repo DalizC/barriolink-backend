@@ -88,7 +88,7 @@ stages:
         echo 'echo "SECRET_KEY definido: $([[ -n \"$SECRET_KEY\" ]] && echo \"SI\" || echo \"NO\")"' >> startup.sh
         echo 'echo "DATABASE_URL definido: $([[ -n \"$DATABASE_URL\" ]] && echo \"SI\" || echo \"NO\")"' >> startup.sh
         echo 'echo "Iniciando gunicorn en puerto ${PORT:-8000}..."' >> startup.sh
-        echo 'exec python -m gunicorn app.wsgi:application --bind=0.0.0.0:${PORT:-8000} --timeout 60 --log-level debug --access-logfile - --error-logfile -' >> startup.sh
+        echo 'exec env PYTHONPATH="/home/site/wwwroot/packages:$PYTHONPATH" python -m gunicorn app.wsgi:application --bind=0.0.0.0:${PORT:-8000} --timeout 60 --log-level debug --access-logfile - --error-logfile -' >> startup.sh
         chmod +x startup.sh
 
         # Crear también un startup simple de respaldo
