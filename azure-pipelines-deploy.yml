@@ -90,7 +90,7 @@ stages:
         echo 'echo "Iniciando gunicorn en puerto ${PORT:-8000}..."' >> startup.sh
         echo 'exec python -m gunicorn app.wsgi:application --bind=0.0.0.0:${PORT:-8000} --timeout 60 --log-level debug --access-logfile - --error-logfile -' >> startup.sh
         chmod +x startup.sh
-        
+
         # Crear también un startup simple de respaldo
         echo '#!/bin/bash' > startup_simple.sh
         echo 'echo "=== STARTUP SIMPLE ==="' >> startup_simple.sh

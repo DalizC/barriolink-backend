@@ -9,7 +9,7 @@ name: 'Mirror-$(Date:yyyyMMdd)$(Rev:.r)'
 # Trigger: Se ejecuta cuando hay push a estas ramas
 trigger:
   branches:
-    include: 
+    include:
       - main
       - develop
       - release/*
@@ -23,7 +23,7 @@ trigger:
 # Pull Request: También sincroniza en PRs
 pr:
   branches:
-    include: 
+    include:
       - main
       - develop
   paths:
@@ -41,13 +41,13 @@ variables:
   - name: shouldDeploy
     value: true
 
-pool: 
+pool:
   name: home-office
 
 stages:
 - stage: ValidateAndMirror
   displayName: 'Validate and Mirror to GitHub'
-  
+
   jobs:
   - job: PreValidation
     displayName: 'Pre-validation Checks'
@@ -64,7 +64,7 @@ stages:
         Write-Host "Commit: $(Build.SourceVersion)"
         Write-Host "Trigger Reason: $(Build.Reason)"
         Write-Host "================================"
-        
+
         # Verificar que las variables estén configuradas
         if (-not $env:GITHUB_USER -or -not $env:GITHUB_PAT -or -not $env:GITHUB_OWNER -or -not $env:GITHUB_REPO) {
             Write-Error "Variables de GitHub no configuradas correctamente"
@@ -83,7 +83,7 @@ stages:
     displayName: 'Mirror Repository to GitHub'
     dependsOn: PreValidation
     condition: and(succeeded(), eq(variables.shouldMirror, 'true'))
-    
+
     steps:
     - checkout: self
       fetchDepth: 0
@@ -91,30 +91,30 @@ stages:
 
     - powershell: |
         $ErrorActionPreference = 'Continue'  # Cambiado para manejar errores manualmente
-        
+
         Write-Host "Configurando Git..."
         git config user.name "Azure DevOps Mirror"
         git config user.email "azuredevops-mirror@barriolink.com"
         git config core.autocrlf false
         git config push.default current
-        
+
         Write-Host "Información del repositorio:"
         git log --oneline -5
         Write-Host "Rama actual: $(git branch --show-current)"
         Write-Host "Ramas disponibles:"
         git branch -a
-        
+
         Write-Host "Configurando remote GitHub..."
         $remoteUrl = "https://$(GITHUB_USER):$(GITHUB_PAT)@github.com/$(GITHUB_OWNER)/$(GITHUB_REPO).git"
-        
+
         # Verificar remotes existentes
         Write-Host "Remotes actuales:"
         git remote -v
-        
+
         # Verificar si el remote github ya existe (manejo de errores manual)
         git remote get-url github 2>$null
         $remoteExists = $LASTEXITCODE -eq 0
-        
+
         if ($remoteExists) {
             Write-Host "Remote 'github' ya existe, actualizando URL..."
             git remote set-url github $remoteUrl
@@ -122,10 +122,10 @@ stages:
             Write-Host "Agregando nuevo remote 'github'..."
             git remote add github $remoteUrl
         }
-        
+
         Write-Host "Remotes después de configuración:"
         git remote -v
-        
+
         Write-Host "Verificando conectividad con GitHub..."
         git ls-remote github HEAD 2>&1
         if ($LASTEXITCODE -ne 0) {
@@ -134,7 +134,7 @@ stages:
             exit 1
         }
         Write-Host "Conexión a GitHub exitosa"
-        
+
       displayName: 'Configure Git and GitHub Remote'
       env:
         GITHUB_USER: $(GITHUB_USER)
@@ -144,56 +144,56 @@ stages:
 
     - powershell: |
         $ErrorActionPreference = 'Continue'  # Manejo manual de errores
-        
+
         # Obtener el nombre completo de la rama desde Build.SourceBranch
         $sourceBranch = "$(Build.SourceBranch)"
         $branch = $sourceBranch -replace "refs/heads/", ""
-        
+
         Write-Host "Source Branch: $sourceBranch"
         Write-Host "Rama extraída: $branch"
-        
+
         $maxRetries = $(maxRetries)
         $retryCount = 0
         $success = $false
-        
+
         Write-Host "Iniciando mirror de la rama: $branch"
         Write-Host "Target: $(GITHUB_OWNER)/$(GITHUB_REPO)"
-        
+
         # Verificar estado actual del repositorio
         Write-Host "Estado actual del repositorio:"
         Write-Host "Rama local actual: $(git branch --show-current)"
         Write-Host "Commit actual: $(git rev-parse HEAD)"
-        
+
         # Verificar si la rama existe en GitHub (sin hacer fetch todavía)
         Write-Host "Verificando si la rama '$branch' existe en GitHub..."
         git ls-remote --heads github $branch 2>&1
         $branchExistsOnGitHub = $LASTEXITCODE -eq 0
-        
+
         if ($branchExistsOnGitHub) {
             Write-Host "La rama '$branch' ya existe en GitHub"
         } else {
             Write-Host "La rama '$branch' NO existe en GitHub - se creará automáticamente"
         }
-        
+
         while (-not $success -and $retryCount -lt $maxRetries) {
             $retryCount++
             Write-Host "Intento $retryCount de $maxRetries"
-            
+
             try {
                 # Simplificar: siempre hacer fetch general primero
                 Write-Host "Obteniendo referencias de GitHub..."
                 git fetch github 2>&1
-                
+
                 if ($branchExistsOnGitHub) {
                     Write-Host "La rama '$branch' existe en GitHub, sincronizando..."
-                    
+
                     # Obtener commits para comparar
                     $localCommit = git rev-parse HEAD
                     $remoteCommit = git rev-parse "github/$branch" 2>$null
-                    
+
                     Write-Host "Local:  $localCommit"
                     Write-Host "Remoto: $remoteCommit"
-                    
+
                     if ($localCommit -eq $remoteCommit) {
                         Write-Host "Las ramas están sincronizadas, no hay cambios que enviar"
                         $success = $true
@@ -206,11 +206,11 @@ stages:
                     Write-Host "Creando nueva rama '$branch' en GitHub..."
                     git push github "HEAD:$branch" 2>&1
                 }
-                
+
                 if ($LASTEXITCODE -eq 0) {
                     Write-Host "Mirror exitoso para la rama '$branch'"
                     $success = $true
-                    
+
                     # Verificar que el push fue exitoso
                     Write-Host "Verificando el push..."
                     git ls-remote --heads github $branch 2>&1
@@ -226,7 +226,7 @@ stages:
                 if ($retryCount -lt $maxRetries) {
                     Write-Host "Esperando 10 segundos antes del siguiente intento..."
                     Start-Sleep -Seconds 10
-                    
+
                     # Re-verificar si la rama ahora existe (por si otro proceso la creó)
                     git ls-remote --heads github $branch 2>&1
                     $branchExistsOnGitHub = $LASTEXITCODE -eq 0
@@ -241,10 +241,10 @@ stages:
                 }
             }
         }
-        
+
         Write-Host "Mirror completado exitosamente!"
         Write-Host "URL: https://github.com/$(GITHUB_OWNER)/$(GITHUB_REPO)/tree/$branch"
-        
+
       displayName: 'Push to GitHub with Retry Logic'
       env:
         GITHUB_OWNER: $(GITHUB_OWNER)
@@ -254,7 +254,7 @@ stages:
         # Obtener el nombre completo de la rama
         $sourceBranch = "$(Build.SourceBranch)"
         $branch = $sourceBranch -replace "refs/heads/", ""
-        
+
         Write-Host "RESUMEN DEL MIRROR"
         Write-Host "====================="
         Write-Host "Rama sincronizada: $branch"
@@ -264,7 +264,7 @@ stages:
         Write-Host "GitHub: https://github.com/$(GITHUB_OWNER)/$(GITHUB_REPO)"
         Write-Host "Rama: https://github.com/$(GITHUB_OWNER)/$(GITHUB_REPO)/tree/$branch"
         Write-Host "====================="
-        
+
         # Verificación final de sincronización
         Write-Host "Verificación final..."
         git ls-remote --heads github $branch 2>&1
@@ -283,7 +283,7 @@ stages:
   displayName: 'Build and Test Django Backend'
   dependsOn: ValidateAndMirror
   condition: and(succeeded(), eq(variables.shouldDeploy, 'true'))
-  
+
   jobs:
   - job: BuildBackend
     displayName: 'Setup Django Backend'
@@ -295,11 +295,11 @@ stages:
     - powershell: |
         Write-Host "BACKEND BUILD PROCESS"
         Write-Host "====================="
-        
+
         # Buscar Python en múltiples ubicaciones comunes (priorizando instalaciones directas)
         $possiblePaths = @(
             "C:\Python312\python.exe",
-            "C:\Program Files\Python312\python.exe", 
+            "C:\Program Files\Python312\python.exe",
             "C:\Program Files (x86)\Python312\python.exe",
             "C:\Users\$env:USERNAME\AppData\Local\Programs\Python\Python312\python.exe",
             "C:\Users\dzuri\AppData\Local\Programs\Python\Python312\python.exe",
@@ -307,7 +307,7 @@ stages:
             "C:\Program Files\Python311\python.exe",
             "py"
         )
-        
+
         $pythonPath = $null
         foreach ($path in $possiblePaths) {
             Write-Host "Verificando: $path"
@@ -338,20 +338,20 @@ stages:
                 }
             }
         }
-        
+
         if (-not $pythonPath) {
             Write-Error "No se encontró una instalación válida de Python"
             Write-Host "Ubicaciones verificadas:"
             $possiblePaths | ForEach-Object { Write-Host "  - $_" }
             exit 1
         }
-        
+
         Write-Host "Usando Python: $pythonPath"
         Write-Host ""
         Write-Host "Directorio actual: $(Get-Location)"
         Write-Host "Estructura del proyecto:"
         ls
-        
+
         Write-Host "Creando entorno virtual Python..."
         if ($pythonPath -like "py *") {
             # Usar Python Launcher con workaround para bibliotecas
@@ -361,23 +361,23 @@ stages:
             # Usar ruta directa
             & $pythonPath -m venv venv
         }
-        
+
         Write-Host "Activando entorno virtual..."
         & "venv\Scripts\Activate.ps1"
-        
+
         Write-Host "Verificando Python y pip del venv..."
         & "venv\Scripts\python.exe" --version
         & "venv\Scripts\pip.exe" --version
-        
+
         Write-Host "Actualizando pip..."
         & "venv\Scripts\python.exe" -m pip install --upgrade pip
-        
+
         Write-Host "Instalando dependencias de Django..."
         & "venv\Scripts\pip.exe" install -r requirements.txt
-        
+
         Write-Host "Verificando instalación de Django..."
         & "venv\Scripts\python.exe" -c "import django; print(f'Django {django.get_version()} instalado correctamente')"
-        
+
         Write-Host "Configurando variables de entorno..."
         $env:DB_HOST = "$(DB_HOST)"
         $env:DB_NAME = "$(DB_NAME)"
@@ -387,22 +387,22 @@ stages:
         $env:DB_SSLMODE = "$(DB_SSLMODE)"
         $env:SECRET_KEY = "$(SECRET_KEY)"
         $env:DEBUG = "$(DEBUG)"
-        
+
         Write-Host "Esperando que la base de datos PostgreSQL esté disponible..."
         & "venv\Scripts\python.exe" manage.py wait_for_db --settings=app.settings
-        
+
         Write-Host "Verificando configuración de Django..."
         & "venv\Scripts\python.exe" manage.py check --settings=app.settings
-        
+
         Write-Host "Ejecutando migraciones (dry-run)..."
         & "venv\Scripts\python.exe" manage.py makemigrations --dry-run --settings=app.settings
-        
+
         Write-Host "BACKEND CONFIGURADO EXITOSAMENTE"
         Write-Host "================================="
       displayName: 'Setup Django Environment'
       workingDirectory: '$(Build.SourcesDirectory)'
 
-  - job: TestBackend  
+  - job: TestBackend
     displayName: 'Run Django Tests'
     dependsOn: BuildBackend
     steps:
@@ -412,11 +412,11 @@ stages:
     - powershell: |
         Write-Host "TESTING DJANGO BACKEND"
         Write-Host "======================"
-        
+
         # Buscar Python (mismo código que en BuildBackend)
         $possiblePaths = @(
             "C:\Python312\python.exe",
-            "C:\Program Files\Python312\python.exe", 
+            "C:\Program Files\Python312\python.exe",
             "C:\Program Files (x86)\Python312\python.exe",
             "C:\Users\$env:USERNAME\AppData\Local\Programs\Python\Python312\python.exe",
             "C:\Users\dzuri\AppData\Local\Programs\Python\Python312\python.exe",
@@ -424,7 +424,7 @@ stages:
             "C:\Program Files\Python311\python.exe",
             "py"
         )
-        
+
         $pythonPath = $null
         foreach ($path in $possiblePaths) {
             if ($path -eq "py") {
@@ -449,12 +449,12 @@ stages:
                 }
             }
         }
-        
+
         if (-not $pythonPath) {
             Write-Error "No se encontró Python válido"
             exit 1
         }
-        
+
         Write-Host "Recreando entorno virtual..."
         if ($pythonPath -like "py *") {
             py -3.12 -m venv venv --copies
@@ -464,7 +464,7 @@ stages:
         & "venv\Scripts\Activate.ps1"
         & "venv\Scripts\pip.exe" install --upgrade pip
         & "venv\Scripts\pip.exe" install -r requirements.txt
-        
+
         Write-Host "Configurando variables de entorno para tests..."
         $env:DB_HOST = "$(DB_HOST)"
         $env:DB_NAME = "$(DB_NAME)"
@@ -474,13 +474,14 @@ stages:
         $env:DB_SSLMODE = "$(DB_SSLMODE)"
         $env:SECRET_KEY = "$(SECRET_KEY)"
         $env:DEBUG = "$(DEBUG)"
-        
+        $env:DJANGO_SETTINGS_MODULE = "app.settings"
+
         Write-Host "Esperando que la base de datos esté disponible..."
         & "venv\Scripts\python.exe" manage.py wait_for_db --settings=app.settings
-        
+
         Write-Host "Ejecutando tests de Django (con PostgreSQL)..."
-        & "venv\Scripts\python.exe" manage.py test --settings=app.settings --verbosity=2
-        
+        & "venv\Scripts\python.exe" manage.py test --settings=app.settings --verbosity=2 --noinput --keepdb
+
         if ($LASTEXITCODE -eq 0) {
             Write-Host "TESTS PASARON EXITOSAMENTE"
             Write-Host "=========================="
@@ -493,7 +494,7 @@ stages:
 
   - job: CreateArtifacts
     displayName: 'Create Deployment Artifacts'
-    dependsOn: [BuildBackend, TestBackend] 
+    dependsOn: [BuildBackend, TestBackend]
     condition: succeeded()
     steps:
     - checkout: self
@@ -502,19 +503,19 @@ stages:
     - powershell: |
         Write-Host "STARTING DJANGO SERVER"
         Write-Host "======================"
-        
+
         # Buscar Python (mismo código que en BuildBackend)
         $possiblePaths = @(
             "C:\Python312\python.exe",
             "C:\Program Files\Python312\python.exe",
-            "C:\Program Files (x86)\Python312\python.exe", 
+            "C:\Program Files (x86)\Python312\python.exe",
             "C:\Users\$env:USERNAME\AppData\Local\Programs\Python\Python312\python.exe",
             "C:\Users\dzuri\AppData\Local\Programs\Python\Python312\python.exe",
             "C:\Python311\python.exe",
             "C:\Program Files\Python311\python.exe",
             "py"
         )
-        
+
         $pythonPath = $null
         foreach ($path in $possiblePaths) {
             if ($path -eq "py") {
@@ -539,12 +540,12 @@ stages:
                 }
             }
         }
-        
+
         if (-not $pythonPath) {
             Write-Error "No se encontró Python válido"
             exit 1
         }
-        
+
         Write-Host "Preparando entorno..."
         if ($pythonPath -like "py *") {
             py -3.12 -m venv venv --copies
@@ -554,7 +555,7 @@ stages:
         & "venv\Scripts\Activate.ps1"
         & "venv\Scripts\pip.exe" install --upgrade pip
         & "venv\Scripts\pip.exe" install -r requirements.txt
-        
+
         Write-Host "Configurando variables de entorno..."
         $env:DB_HOST = "$(DB_HOST)"
         $env:DB_NAME = "$(DB_NAME)"
@@ -564,34 +565,34 @@ stages:
         $env:DB_SSLMODE = "$(DB_SSLMODE)"
         $env:SECRET_KEY = "$(SECRET_KEY)"
         $env:DEBUG = "$(DEBUG)"
-        
+
         Write-Host "Esperando que la base de datos esté disponible..."
         & "venv\Scripts\python.exe" manage.py wait_for_db --settings=app.settings
-        
+
         Write-Host "Verificando configuración de Django..."
         & "venv\Scripts\python.exe" manage.py check --settings=app.settings
-        
+
         Write-Host ""
         Write-Host "CREANDO ARTEFACTOS PARA DEPLOYMENT..."
         Write-Host "====================================="
-        
+
         # Crear directorio para artefactos
         New-Item -ItemType Directory -Force -Path "artifacts"
-        
+
         # Copiar archivos necesarios para deployment
         Write-Host "Empaquetando aplicación Django..."
         Copy-Item -Recurse -Path "app" -Destination "artifacts/"
         Copy-Item -Recurse -Path "core" -Destination "artifacts/"
         Copy-Item -Path "manage.py" -Destination "artifacts/"
         Copy-Item -Path "requirements.txt" -Destination "artifacts/"
-        
+
         # Crear script de deployment básico
         Write-Host "Creando script de deployment..."
         "echo BARRIOLINK DEPLOYMENT SCRIPT" | Out-File -FilePath "artifacts/deploy.bat" -Encoding ASCII
         "echo pip install -r requirements.txt" | Out-File -FilePath "artifacts/deploy.bat" -Encoding ASCII -Append
         "echo python manage.py migrate --settings=app.settings" | Out-File -FilePath "artifacts/deploy.bat" -Encoding ASCII -Append
         "echo gunicorn app.wsgi:application --bind 0.0.0.0:8000" | Out-File -FilePath "artifacts/deploy.bat" -Encoding ASCII -Append
-        
+
         Write-Host " Artefactos creados en ./artifacts/"
         Write-Host " Build completado exitosamente"
         Write-Host ""
