@@ -96,14 +96,6 @@ stages:
                 -DATABASE_URL "$(DATABASE_URL)"
                 -ALLOWED_HOSTS "$(ALLOWED_HOSTS)"
 
-          - task: AzureAppServiceSettings@1
-            displayName: 'Run Django Migrations'
-            inputs:
-              azureSubscription: 'Azure-BarrioLink'
-              appName: '$(APP_SERVICE_NAME)'
-              resourceGroupName: '$(RESOURCE_GROUP_NAME)'
-              appCommandLine: 'python manage.py migrate'
-
 - stage: DeployProduction
   displayName: 'Deploy to Production'
   dependsOn: Build
@@ -132,11 +124,3 @@ stages:
                 -DJANGO_SETTINGS_MODULE "app.settings"
                 -DATABASE_URL "$(DATABASE_URL)"
                 -ALLOWED_HOSTS "$(ALLOWED_HOSTS)"
-
-          - task: AzureAppServiceSettings@1
-            displayName: 'Run Django Migrations'
-            inputs:
-              azureSubscription: 'Azure-BarrioLink'
-              appName: '$(APP_SERVICE_NAME)'
-              resourceGroupName: '$(RESOURCE_GROUP_NAME)'
-              appCommandLine: 'python manage.py migrate'
