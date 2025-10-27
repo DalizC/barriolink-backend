@@ -65,12 +65,10 @@ stages:
         pip install -r requirements.txt --target ./packages
 
         # Crear script de startup que use las dependencias locales
-        cat > startup.sh << 'EOF'
-#!/bin/bash
-export PYTHONPATH="/home/site/wwwroot/packages:$PYTHONPATH"
-cd /home/site/wwwroot
-python -m gunicorn app.wsgi --bind=0.0.0.0:8000
-EOF
+        echo '#!/bin/bash' > startup.sh
+        echo 'export PYTHONPATH="/home/site/wwwroot/packages:$PYTHONPATH"' >> startup.sh
+        echo 'cd /home/site/wwwroot' >> startup.sh
+        echo 'python -m gunicorn app.wsgi --bind=0.0.0.0:8000' >> startup.sh
         chmod +x startup.sh
 
         echo "Package prepared with pre-installed dependencies"
