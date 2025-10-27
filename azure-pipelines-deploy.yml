@@ -55,14 +55,47 @@ stages:
         DATABASE_URL: 'postgres://postgres:postgres@localhost:5432/test_barriolink-dev'
         ALLOWED_HOSTS: 'localhost,127.0.0.1'
 
+    - script: |
+        # Crear directorio para dependencias pre-instaladas
+        mkdir -p deployment_package
+        cp -r . deployment_package/
+        cd deployment_package
+
+        # Instalar dependencias en el directorio local
+        pip install -r requirements.txt --target ./packages
+
+        # Crear script de startup que use las dependencias locales
+        cat > startup.sh << 'EOF'
+#!/bin/bash
+export PYTHONPATH="/home/site/wwwroot/packages:$PYTHONPATH"
+cd /home/site/wwwroot
+python -m gunicorn app.wsgi --bind=0.0.0.0:8000
+EOF
+        chmod +x startup.sh
+
+        echo "Package prepared with pre-installed dependencies"
+        ls -la
+      displayName: 'Prepare deployment package with dependencies'
+
     - task: ArchiveFiles@2
       displayName: 'Archive files'
       inputs:
-        rootFolderOrFile: '$(System.DefaultWorkingDirectory)'
+        rootFolderOrFile: '$(System.DefaultWorkingDirectory)/deployment_package'
         includeRootFolder: false
         archiveType: zip
         archiveFile: $(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip
         replaceExistingArchive: true
+
+    - script: |
+        echo "Deployment package verification:"
+        ls -la deployment_package/
+        echo ""
+        echo "Dependencies in packages directory:"
+        ls -la deployment_package/packages/ | head -10
+        echo ""
+        echo "Startup script exists and is executable:"
+        ls -la deployment_package/startup.sh
+      displayName: 'Verify package contents'
 
     - upload: $(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip
       artifact: drop
@@ -89,6 +122,7 @@ stages:
               appName: '$(APP_SERVICE_NAME)'
               package: '$(Pipeline.Workspace)/drop/$(Build.BuildId).zip'
               runtimeStack: 'PYTHON|3.12'
+              startUpCommand: '/home/site/wwwroot/startup.sh'
               appSettings: '-SECRET_KEY "$(SECRET_KEY)" -DEBUG "True" -DJANGO_SETTINGS_MODULE "app.settings" -DATABASE_URL "$(DATABASE_URL)" -ALLOWED_HOSTS "$(ALLOWED_HOSTS)"'
 
 - stage: DeployProduction
@@ -113,4 +147,5 @@ stages:
               appName: '$(APP_SERVICE_NAME)'
               package: '$(Pipeline.Workspace)/drop/$(Build.BuildId).zip'
               runtimeStack: 'PYTHON|3.12'
+              startUpCommand: '/home/site/wwwroot/startup.sh'
               appSettings: '-SECRET_KEY "$(SECRET_KEY)" -DEBUG "False" -DJANGO_SETTINGS_MODULE "app.settings" -DATABASE_URL "$(DATABASE_URL)" -ALLOWED_HOSTS "$(ALLOWED_HOSTS)"'
