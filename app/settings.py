@@ -43,13 +43,13 @@ allowed_hosts_env = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1,0.0.0.0
 ALLOWED_HOSTS = [host.strip() for host in allowed_hosts_env.split(',')]
 
 # Debug logging para Azure App Service
-print(f"🔧 Django Settings Debug:")
+print("=== Django Settings Debug ===")
 print(f"   DEBUG: {DEBUG}")
 print(f"   SECRET_KEY definido: {'SI' if os.environ.get('SECRET_KEY') else 'NO (usando default)'}")
 print(f"   ALLOWED_HOSTS: {ALLOWED_HOSTS}")
 print(f"   DATABASE_URL definido: {'SI' if os.environ.get('DATABASE_URL') else 'NO'}")
-print(f"   CORS_ALLOW_ALL_ORIGINS será: {'SI' if DEBUG else 'NO'}")
-print(f"🔧 Fin Settings Debug")
+print(f"   CORS_ALLOW_ALL_ORIGINS sera: {'SI' if DEBUG else 'NO'}")
+print("=== Fin Settings Debug ===")
 
 
 # Application definition
