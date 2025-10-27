@@ -84,9 +84,19 @@ stages:
         echo 'python -c "import django; print(f\"Django version: {django.VERSION}\")"' >> startup.sh
         echo 'echo "Verificando app.wsgi..."' >> startup.sh
         echo 'python -c "import app.wsgi; print(\"WSGI module loaded successfully\")"' >> startup.sh
+        echo 'echo "Variables de entorno críticas:"' >> startup.sh
+        echo 'echo "SECRET_KEY definido: $([[ -n \"$SECRET_KEY\" ]] && echo \"SI\" || echo \"NO\")"' >> startup.sh
+        echo 'echo "DATABASE_URL definido: $([[ -n \"$DATABASE_URL\" ]] && echo \"SI\" || echo \"NO\")"' >> startup.sh
         echo 'echo "Iniciando gunicorn en puerto ${PORT:-8000}..."' >> startup.sh
         echo 'exec python -m gunicorn app.wsgi:application --bind=0.0.0.0:${PORT:-8000} --timeout 60 --log-level debug --access-logfile - --error-logfile -' >> startup.sh
         chmod +x startup.sh
+        
+        # Crear también un startup simple de respaldo
+        echo '#!/bin/bash' > startup_simple.sh
+        echo 'echo "=== STARTUP SIMPLE ==="' >> startup_simple.sh
+        echo 'cd /home/site/wwwroot' >> startup_simple.sh
+        echo 'python -m gunicorn app.wsgi:application --bind=0.0.0.0:${PORT:-8000} --log-level info' >> startup_simple.sh
+        chmod +x startup_simple.sh
 
         echo "Package prepared with pre-installed dependencies"
         echo "=== VERIFICANDO ESTRUCTURA DEL PACKAGE ==="

@@ -42,6 +42,15 @@ DEBUG = os.environ.get('DEBUG', 'False').lower() in ('true', '1', 'yes')
 allowed_hosts_env = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1,0.0.0.0')
 ALLOWED_HOSTS = [host.strip() for host in allowed_hosts_env.split(',')]
 
+# Debug logging para Azure App Service
+print(f"🔧 Django Settings Debug:")
+print(f"   DEBUG: {DEBUG}")
+print(f"   SECRET_KEY definido: {'SI' if os.environ.get('SECRET_KEY') else 'NO (usando default)'}")
+print(f"   ALLOWED_HOSTS: {ALLOWED_HOSTS}")
+print(f"   DATABASE_URL definido: {'SI' if os.environ.get('DATABASE_URL') else 'NO'}")
+print(f"   CORS_ALLOW_ALL_ORIGINS será: {'SI' if DEBUG else 'NO'}")
+print(f"🔧 Fin Settings Debug")
+
 
 # Application definition
 
@@ -52,6 +61,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'corsheaders',
     'core',
     'rest_framework',
     'rest_framework.authtoken',
@@ -62,6 +72,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.locale.LocaleMiddleware',  # Para detección automática de idioma
@@ -189,3 +200,49 @@ SPECTACULAR_SETTINGS = {
     'DESCRIPTION': 'API REST para BarrioLink',
     'VERSION': '1.0.0',
 }
+
+# =============================================
+# CORS (Cross-Origin Resource Sharing) Settings
+# =============================================
+
+# CORS configuration for production and development
+CORS_ALLOWED_ORIGINS = []
+
+# Get CORS origins from environment variable
+cors_origins_env = os.environ.get('CORS_ALLOWED_ORIGINS', '')
+if cors_origins_env:
+    CORS_ALLOWED_ORIGINS = [origin.strip() for origin in cors_origins_env.split(',')]
+
+# Development settings - Allow all origins if DEBUG is True
+if DEBUG:
+    CORS_ALLOW_ALL_ORIGINS = True
+    print("DEBUG=True: CORS allowing all origins")
+else:
+    CORS_ALLOW_ALL_ORIGINS = False
+    print(f"PRODUCTION: CORS limited to: {CORS_ALLOWED_ORIGINS}")
+
+# CORS Headers that can be used during the actual request
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
+
+# CORS Methods that are allowed
+CORS_ALLOWED_METHODS = [
+    'DELETE',
+    'GET',
+    'OPTIONS',
+    'PATCH',
+    'POST',
+    'PUT',
+]
+
+# Allow credentials (cookies, authorization headers)
+CORS_ALLOW_CREDENTIALS = True
