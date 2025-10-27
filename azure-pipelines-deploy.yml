@@ -66,20 +66,39 @@ stages:
 
         # Crear script de startup que use las dependencias locales
         echo '#!/bin/bash' > startup.sh
+        echo 'set -e  # Exit on any error' >> startup.sh
         echo 'echo "=== STARTUP SCRIPT INICIANDO ==="' >> startup.sh
+        echo 'echo "Current user: $(whoami)"' >> startup.sh
+        echo 'echo "Current directory: $(pwd)"' >> startup.sh
+        echo 'echo "Available files:"' >> startup.sh
+        echo 'ls -la' >> startup.sh
         echo 'export PYTHONPATH="/home/site/wwwroot/packages:$PYTHONPATH"' >> startup.sh
         echo 'echo "PYTHONPATH configurado: $PYTHONPATH"' >> startup.sh
         echo 'echo "PORT configurado: ${PORT:-8000}"' >> startup.sh
-        echo 'cd /home/site/wwwroot' >> startup.sh
-        echo 'echo "Directorio actual: $(pwd)"' >> startup.sh
-        echo 'echo "Verificando Django..."' >> startup.sh
+        echo 'echo "Python version:"' >> startup.sh
+        echo 'python --version' >> startup.sh
+        echo 'echo "Verificando que packages existe:"' >> startup.sh
+        echo 'ls -la packages/ | head -5' >> startup.sh
+        echo 'echo "Verificando Django import..."' >> startup.sh
+        echo 'python -c "import sys; print(\"Python path:\", sys.path[:3])"' >> startup.sh
         echo 'python -c "import django; print(f\"Django version: {django.VERSION}\")"' >> startup.sh
-        echo 'echo "Iniciando gunicorn..."' >> startup.sh
-        echo 'python -m gunicorn app.wsgi --bind=0.0.0.0:${PORT:-8000} --log-level debug' >> startup.sh
+        echo 'echo "Verificando app.wsgi..."' >> startup.sh
+        echo 'python -c "import app.wsgi; print(\"WSGI module loaded successfully\")"' >> startup.sh
+        echo 'echo "Iniciando gunicorn en puerto ${PORT:-8000}..."' >> startup.sh
+        echo 'exec python -m gunicorn app.wsgi:application --bind=0.0.0.0:${PORT:-8000} --timeout 60 --log-level debug --access-logfile - --error-logfile -' >> startup.sh
         chmod +x startup.sh
 
         echo "Package prepared with pre-installed dependencies"
+        echo "=== VERIFICANDO ESTRUCTURA DEL PACKAGE ==="
         ls -la
+        echo "=== VERIFICANDO PACKAGES DIRECTORY ==="
+        ls -la packages/ | head -10
+        echo "=== VERIFICANDO DJANGO EN PACKAGES ==="
+        ls -la packages/django* || echo "Django no encontrado en packages"
+        echo "=== VERIFICANDO STARTUP SCRIPT ==="
+        cat startup.sh
+        echo "=== TEST LOCAL DEL PYTHONPATH ==="
+        PYTHONPATH="./packages:$PYTHONPATH" python -c "import django; print('Django importado exitosamente')" || echo "Error importando Django"
       displayName: 'Prepare deployment package with dependencies'
 
     - task: ArchiveFiles@2
