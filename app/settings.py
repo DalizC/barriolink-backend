@@ -42,16 +42,6 @@ DEBUG = os.environ.get('DEBUG', 'False').lower() in ('true', '1', 'yes')
 allowed_hosts_env = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1,0.0.0.0')
 ALLOWED_HOSTS = [host.strip() for host in allowed_hosts_env.split(',')]
 
-# Debug logging para Azure App Service
-print("=== Django Settings Debug ===")
-print(f"   DEBUG: {DEBUG}")
-print(f"   SECRET_KEY definido: {'SI' if os.environ.get('SECRET_KEY') else 'NO (usando default)'}")
-print(f"   ALLOWED_HOSTS: {ALLOWED_HOSTS}")
-print(f"   DATABASE_URL definido: {'SI' if os.environ.get('DATABASE_URL') else 'NO'}")
-print(f"   CORS_ALLOW_ALL_ORIGINS sera: {'SI' if DEBUG else 'NO'}")
-print("=== Fin Settings Debug ===")
-
-
 # Application definition
 
 INSTALLED_APPS = [
@@ -74,6 +64,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.locale.LocaleMiddleware',  # Para detección automática de idioma
     'django.middleware.common.CommonMiddleware',
@@ -192,6 +183,11 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'  # Para collectstatic
 STATICFILES_DIRS = [
     BASE_DIR / 'static',
 ]
+STORAGES = {
+    'staticfiles': {
+        'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
+    },
+}
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
