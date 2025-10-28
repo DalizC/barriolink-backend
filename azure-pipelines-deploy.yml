@@ -42,6 +42,10 @@ stages:
         ALLOWED_HOSTS: 'localhost,127.0.0.1'
 
     - script: |
+        python manage.py collectstatic --noinput
+      displayName: 'Collect static'
+
+    - script: |
         python manage.py test --keepdb
       displayName: 'Run tests'
       env:
@@ -49,10 +53,6 @@ stages:
         DJANGO_SETTINGS_MODULE: 'app.settings'
         DATABASE_URL: 'postgres://postgres:postgres@localhost:5432/test_barriolink-dev'
         ALLOWED_HOSTS: 'localhost,127.0.0.1'
-
-    - script: |
-        python manage.py collectstatic --noinput
-      displayName: 'Collect static'
 
     - task: ArchiveFiles@2
       displayName: 'Archive repo root'
