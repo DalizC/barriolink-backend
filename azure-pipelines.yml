@@ -197,12 +197,12 @@ stages:
                         $success = $true
                     } else {
                         Write-Host "Push con --force-with-lease para seguridad..."
-                        git push github "HEAD:$branch" --force-with-lease 2>&1
+                        git push github "HEAD:refs/heads/$branch" --force-with-lease 2>&1
                     }
                 } else {
                     # Si la rama no existe, crearla directamente
                     Write-Host "Creando nueva rama '$branch' en GitHub..."
-                    git push github "HEAD:$branch" 2>&1
+                    git push github "HEAD:refs/heads/$branch" 2>&1
                 }
 
                 if ($LASTEXITCODE -eq 0) {
