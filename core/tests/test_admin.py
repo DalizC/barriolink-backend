@@ -2,12 +2,19 @@
 Test para Django Admin.
 """
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 from django.test import Client
 
 
+@override_settings(
+    STORAGES={
+        'staticfiles': {
+            'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage',
+        },
+    }
+)
 class AdminSiteTests(TestCase):
     """Tests para Django Admin."""
 

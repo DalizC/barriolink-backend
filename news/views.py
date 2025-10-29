@@ -16,15 +16,24 @@ class IsAuthorOrReadOnly(permissions.BasePermission):
 		# Lectura pública
 		if request.method in permissions.SAFE_METHODS:
 			return True
-		# Escritura requiere autenticación
-		return request.user and request.user.is_authenticated
+		# Escritura requiere autenticación y rol de miembro
+		return (
+			request.user
+			and request.user.is_authenticated
+			and request.user.is_member
+		)
 
 	def has_object_permission(self, request, view, obj):
 		# Lectura pública
 		if request.method in permissions.SAFE_METHODS:
 			return True
-		# Solo el autor puede modificar/eliminar
-		return obj.author == request.user
+		# Solo el autor con rol miembro puede modificar/eliminar
+		return (
+			request.user
+			and request.user.is_authenticated
+			and request.user.is_member
+			and obj.author == request.user
+		)
 
 
 @extend_schema(tags=['News'])

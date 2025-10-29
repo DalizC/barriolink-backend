@@ -57,7 +57,8 @@ class PrivateEventApiTests(TestCase):
         self.client = APIClient()
         self.user = get_user_model().objects.create_user(
             'user@example.com',
-            'testpass'
+            'testpass',
+            role=get_user_model().Role.MEMBER,
         )
         self.client.force_authenticate(user=self.user)
 
@@ -239,3 +240,25 @@ class PrivateEventApiTests(TestCase):
 
         self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
         self.assertTrue(Event.objects.filter(id=event.id).exists())
+
+    def test_registered_user_cannot_create_event(self):
+        """Prueba que un usuario con rol registrado no pueda crear eventos."""
+        basic_user = get_user_model().objects.create_user(
+            'registered@example.com',
+            'testpass',
+            role=get_user_model().Role.REGISTERED,
+        )
+        self.client.force_authenticate(user=basic_user)
+
+        payload = {
+            'title': 'Evento restringido',
+            'description': 'Detalle',
+            'location': 'Ubicación',
+            'address': 'Dirección 123',
+            'address_url': 'http://example.com',
+            'date': '2024-07-20',
+            'duration': '02:00:00',
+        }
+        res = self.client.post(EVENTS_URL, payload)
+
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)

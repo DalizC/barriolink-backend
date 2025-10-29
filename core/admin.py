@@ -11,8 +11,9 @@ from core import models
 class UserAdmin(BaseUserAdmin):
     """Admin para el modelo de usuario."""
     ordering = ['email']
-    list_display = ['email', 'name']
+    list_display = ['email', 'name', 'role']
     search_fields = ['email', 'name']
+    list_filter = ['role', 'is_active', 'is_staff', 'is_superuser']
     fieldsets = (
         (None, {'fields': ('email', 'password')}),
         (
@@ -21,7 +22,7 @@ class UserAdmin(BaseUserAdmin):
         ),
         (
             'Permisos',
-            {'fields': ('is_active', 'is_staff', 'is_superuser')}
+            {'fields': ('role', 'is_active', 'is_staff', 'is_superuser')}
         ),
         (
             'Fechas Importantes',
@@ -32,7 +33,7 @@ class UserAdmin(BaseUserAdmin):
     add_fieldsets = (
         (None, {
             'classes': ('wide',),
-            'fields': ('email', 'password1', 'password2', 'name', 'is_active', 'is_staff', 'is_superuser'),
+            'fields': ('email', 'password1', 'password2', 'name', 'role', 'is_active', 'is_staff', 'is_superuser'),
         }),
     )
 
