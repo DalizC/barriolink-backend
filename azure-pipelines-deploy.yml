@@ -54,6 +54,13 @@ stages:
         DATABASE_URL: 'postgres://postgres:postgres@localhost:5432/test_barriolink-dev'
         ALLOWED_HOSTS: 'localhost,127.0.0.1'
 
+    - script: |
+        rm -rf antenv
+        python -m venv antenv
+        antenv/bin/pip install --upgrade pip
+        antenv/bin/pip install -r requirements.txt
+      displayName: 'Create deployment virtualenv'
+
     - task: ArchiveFiles@2
       displayName: 'Archive repo root'
       inputs:
@@ -88,6 +95,8 @@ stages:
               appName: '$(APP_SERVICE_NAME)'
               package: '$(Pipeline.Workspace)/drop/app.zip'
               runtimeStack: 'PYTHON|3.12'
+              appSettings: |
+                -SCM_DO_BUILD_DURING_DEPLOYMENT false
 
 - stage: DeployProduction
   displayName: 'Deploy to Production'
@@ -111,3 +120,5 @@ stages:
               appName: '$(APP_SERVICE_NAME)'
               package: '$(Pipeline.Workspace)/drop/app.zip'
               runtimeStack: 'PYTHON|3.12'
+              appSettings: |
+                -SCM_DO_BUILD_DURING_DEPLOYMENT false
