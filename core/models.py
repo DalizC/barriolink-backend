@@ -1,10 +1,12 @@
 """
 Modelos de la base datos.
 """
-from time import timezone
 from django.conf import settings
 from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
+from django.core.exceptions import ValidationError
+from django.db.models import F, Q
+from django.utils import timezone
 
 
 class UserManager(BaseUserManager):
@@ -138,26 +140,9 @@ class Application(models.Model):
         self.save()
 
 
-class Event(models.Model):
-    """Modelo de Evento."""
-    user = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
-    )
-    title = models.CharField(max_length=255)
-    description = models.TextField(blank=True)
-    location = models.CharField(max_length=255)  # Nombre del lugar
-    address = models.CharField(max_length=255, blank=True) # Dirección física
-    address_url = models.URLField(max_length=500, blank=True, null=True)  # Link al mapa
-    date = models.DateField()
-    duration = models.DurationField()
-    capacity = models.IntegerField(null=True, blank=True)
+class Facility(models.Model):
+    """Modelo de Espacio Comunitario (instalación gestionada)."""
 
-    def __str__(self):
-        return self.title
-
-class Space(models.Model):
-    """Modelo de Espacio Comunitario."""
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -167,8 +152,141 @@ class Space(models.Model):
     address = models.CharField(max_length=255)
     capacity = models.IntegerField()
 
+    class Meta:
+        verbose_name = 'Facility'
+        verbose_name_plural = 'Facilities'
+        ordering = ['name']
+
     def __str__(self):
         return self.name
+
+
+class Event(models.Model):
+    """Modelo de Evento o actividad comunitaria."""
+
+    class Status(models.TextChoices):
+        SCHEDULED = ('scheduled', 'Programado')
+        CANCELLED = ('cancelled', 'Cancelado')
+        COMPLETED = ('completed', 'Completado')
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+    )
+    title = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.SCHEDULED,
+    )
+    is_public = models.BooleanField(default=True)
+    facility = models.ForeignKey(
+        'Facility',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='events',
+    )
+    location = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text='Ubicación personalizada cuando no se usa una instalación administrada.',
+    )
+    address = models.CharField(max_length=255, blank=True)
+    address_url = models.URLField(max_length=500, blank=True, null=True)
+    date = models.DateField()
+    duration = models.DurationField()
+    capacity = models.IntegerField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-date', 'title']
+
+    def __str__(self):
+        return self.title
+
+    @property
+    def has_capacity_limit(self):
+        return self.capacity is not None
+
+
+class Booking(models.Model):
+    """Reserva de una instalación para un bloque de tiempo."""
+
+    class Status(models.TextChoices):
+        CONFIRMED = ('confirmed', 'Confirmada')
+        PENDING = ('pending', 'Pendiente')
+        CANCELLED = ('cancelled', 'Cancelada')
+
+    facility = models.ForeignKey(
+        Facility,
+        on_delete=models.PROTECT,
+        related_name='bookings',
+    )
+    event = models.ForeignKey(
+        Event,
+        on_delete=models.CASCADE,
+        related_name='bookings',
+        null=True,
+        blank=True,
+    )
+    start_at = models.DateTimeField()
+    end_at = models.DateTimeField()
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.CONFIRMED,
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='created_bookings',
+    )
+    notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['start_at']
+        constraints = [
+            models.CheckConstraint(
+                check=Q(end_at__gt=F('start_at')),
+                name='booking_end_after_start',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.facility.name} ({self.start_at} - {self.end_at})'
+
+    def clean(self):
+        super().clean()
+        if self.end_at <= self.start_at:
+            raise ValidationError('La hora de término debe ser posterior al inicio.')
+
+        if self.status == self.Status.CANCELLED:
+            return
+
+        overlap_qs = Booking.objects.filter(
+            facility=self.facility,
+            status__in=[self.Status.CONFIRMED, self.Status.PENDING],
+        ).exclude(pk=self.pk).filter(
+            Q(start_at__lt=self.end_at) &
+            Q(end_at__gt=self.start_at)
+        )
+
+        if overlap_qs.exists():
+            raise ValidationError('La instalación ya está reservada en el horario solicitado.')
+
+    def cancel(self, by_user=None, reason=''):
+        """Cancelar la reserva."""
+        self.status = self.Status.CANCELLED
+        if reason:
+            self.notes = f'{self.notes}\nCancelado: {reason}' if self.notes else f'Cancelado: {reason}'
+        if by_user:
+            self.notes = f'{self.notes}\nAcción por: {by_user.email}' if self.notes else f'Acción por: {by_user.email}'
+        self.save(update_fields=['status', 'notes', 'updated_at'])
 
 class News(models.Model):
     """Modelo de Noticia."""
