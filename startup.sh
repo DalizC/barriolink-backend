@@ -1,8 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "[startup] Instalando dependencias nativas para WeasyPrint..."
-
+echo ">>> [startup] Instalando dependencias de sistema para WeasyPrint..."
 apt-get update
 apt-get install -y \
     libpango-1.0-0 \
@@ -11,9 +10,11 @@ apt-get install -y \
     libffi-dev \
     shared-mime-info
 
-echo "[startup] Dependencias instaladas correctamente. Devolviendo control al contenedor."
+echo ">>> [startup] Asegurando dependencias Python..."
+cd /home/site/wwwroot
+pip install --no-cache-dir -r requirements.txt
 
-# Importante: NO arrancamos gunicorn aquí.
-# App Service, después de ejecutar este script, sigue con su proceso normal:
-# detecta Django y ejecuta algo como:
-#   gunicorn --bind=0.0.0.0 --timeout 600 <module>.wsgi
+echo ">>> [startup] Lanzando gunicorn..."
+: "${DJANGO_WSGI_MODULE:=app.wsgi:application}"
+
+gunicorn --bind=0.0.0.0:${PORT:-8000} "$DJANGO_WSGI_MODULE"
