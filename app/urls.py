@@ -17,8 +17,22 @@ Including another URLconf
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from django.contrib import admin
 from django.urls import path, include
+from django.conf import settings
+from django.conf.urls.static import static
+from django.http import JsonResponse
+import django
+
+def health_check(request):
+    """Simple health check endpoint"""
+    return JsonResponse({
+        'status': 'ok',
+        'django_version': django.VERSION,
+        'message': 'BarrioLink API is running!'
+    })
 
 urlpatterns = [
+    path('', health_check, name='health'),
+    path('health/', health_check, name='health-check'),
     path('admin/', admin.site.urls),
     path('api/schema/', SpectacularAPIView.as_view(), name='api-schema'),
     path('api/docs/', SpectacularSwaggerView.as_view(url_name='api-schema'), name='api-docs'),
@@ -26,4 +40,8 @@ urlpatterns = [
     path('api/project/', include('project.urls')),
     path('api/news/', include('news.urls')),
     path('api/event/', include('event.urls')),
+    path('api/certificates/', include('certificates.urls')),
 ]
+
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

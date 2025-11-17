@@ -12,6 +12,13 @@ from rest_framework import status
 CREATE_USER_URL = reverse('user:create')
 TOKEN_URL = reverse('user:token')
 ME_URL = reverse('user:me')
+ADMIN_USERS_URL = reverse('user:admin-user-list')
+
+
+def admin_user_role_url(user_id):
+    """Retornar URL para actualización de rol de usuario."""
+    return reverse('user:admin-user-role', args=[user_id])
+
 
 def create_user(**params):
     """Crear y retornar un nuevo usuario."""
@@ -35,6 +42,7 @@ class PublicUserApiTests(TestCase):
         user = get_user_model().objects.get(email=payload['email'])
         self.assertTrue(user.check_password(payload['password']))
         self.assertNotIn('password', response.data)
+        self.assertEqual(response.data['role'], get_user_model().Role.REGISTERED)
 
     def test_user_with_email_exists_error(self):
         """Prueba error al crear usuario si el email ya existe."""
@@ -62,11 +70,29 @@ class PublicUserApiTests(TestCase):
         self.assertFalse(user_exists)
 
     def test_create_token_for_user(self):
-        """Prueba crear token para el usuario."""
+        """Prueba crear token para un usuario con rol miembro."""
         user_details = {
             'name': 'Test Name',
             'email': 'testuser@example.com',
             'password': 'test-user-pass123'
+        }
+        create_user(**user_details, role=get_user_model().Role.MEMBER)
+
+        payload = {
+            'email': user_details['email'],
+            'password': user_details['password'],
+        }
+        response = self.client.post(TOKEN_URL, payload)
+
+        self.assertIn('token', response.data)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_create_token_allows_registered_role(self):
+        """Prueba que un usuario registrado básico puede obtener token."""
+        user_details = {
+            'name': 'Basic User',
+            'email': 'basic@example.com',
+            'password': 'basic-pass123'
         }
         create_user(**user_details)
 
@@ -120,7 +146,8 @@ class PrivateUserApiTests(TestCase):
         self.user = create_user(
             name='Test Name',
             email='testuser@example.com',
-            password='testpass123'
+            password='testpass123',
+            role=get_user_model().Role.MEMBER,
         )
         self.client = APIClient()
         self.client.force_authenticate(user=self.user)
@@ -134,7 +161,8 @@ class PrivateUserApiTests(TestCase):
             response.data,
             {
                 'name': self.user.name,
-                'email': self.user.email
+                'email': self.user.email,
+                'role': self.user.role,
             }
         )
 
@@ -154,3 +182,61 @@ class PrivateUserApiTests(TestCase):
         self.assertEqual(self.user.name, payload['name'])
         self.assertTrue(self.user.check_password(payload['password']))
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+
+class AdminUserApiTests(TestCase):
+    """Pruebas para endpoints administrados por usuarios con rol admin."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.admin_user = create_user(
+            name='Admin User',
+            email='admin@example.com',
+            password='adminpass123',
+            role=get_user_model().Role.ADMIN,
+        )
+        self.client.force_authenticate(user=self.admin_user)
+        self.target_user = create_user(
+            name='Target User',
+            email='target@example.com',
+            password='targetpass123',
+            role=get_user_model().Role.REGISTERED,
+        )
+
+    def test_admin_can_list_users(self):
+        """Prueba que un administrador puede listar usuarios."""
+        response = self.client.get(ADMIN_USERS_URL)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertGreaterEqual(len(response.data), 1)
+
+    def test_admin_can_update_user_role(self):
+        """Prueba que un administrador puede actualizar el rol de un usuario."""
+        payload = {'role': get_user_model().Role.MEMBER}
+        url = admin_user_role_url(self.target_user.id)
+
+        response = self.client.patch(url, payload)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        self.target_user.refresh_from_db()
+        self.assertEqual(self.target_user.role, payload['role'])
+
+    def test_admin_cannot_set_invalid_role(self):
+        """Prueba que se retorna error al asignar un rol inválido."""
+        url = admin_user_role_url(self.target_user.id)
+        response = self.client.patch(url, {'role': 'invalid-role'})
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_non_admin_cannot_access_admin_endpoints(self):
+        """Prueba que un usuario sin rol admin no puede acceder a endpoints admin."""
+        basic_user = create_user(
+            name='Basic',
+            email='basic-admin@example.com',
+            password='basicpass123',
+            role=get_user_model().Role.MEMBER,
+        )
+        self.client.force_authenticate(user=basic_user)
+
+        response = self.client.get(ADMIN_USERS_URL)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)

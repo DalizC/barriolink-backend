@@ -7,23 +7,20 @@ variables:
 
 stages:
 - stage: Build
-  displayName: 'Build and Test'
+  displayName: 'Build'
   jobs:
   - job: BuildJob
     displayName: 'Build Job'
     pool:
       vmImage: 'ubuntu-latest'
-
     services:
       postgres:
         image: postgres:15
         env:
           POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: test_barriolink-dev
+          POSTGRES_DB: postgres
         ports:
           - 5432:5432
-        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
-
     steps:
     - task: UsePythonVersion@0
       inputs:
@@ -40,31 +37,40 @@ stages:
       displayName: 'Django check'
       env:
         SECRET_KEY: $(SECRET_KEY)
-        DEBUG: 'False'
         DJANGO_SETTINGS_MODULE: 'app.settings'
         DATABASE_URL: 'postgres://postgres:postgres@localhost:5432/test_barriolink-dev'
         ALLOWED_HOSTS: 'localhost,127.0.0.1'
+
+    - script: |
+        python manage.py collectstatic --noinput
+      displayName: 'Collect static'
 
     - script: |
         python manage.py test --keepdb
       displayName: 'Run tests'
       env:
         SECRET_KEY: $(SECRET_KEY)
-        DEBUG: 'False'
         DJANGO_SETTINGS_MODULE: 'app.settings'
         DATABASE_URL: 'postgres://postgres:postgres@localhost:5432/test_barriolink-dev'
         ALLOWED_HOSTS: 'localhost,127.0.0.1'
 
+    - script: |
+        rm -rf antenv
+        python -m venv antenv
+        antenv/bin/pip install --upgrade pip
+        antenv/bin/pip install -r requirements.txt
+      displayName: 'Create deployment virtualenv'
+
     - task: ArchiveFiles@2
-      displayName: 'Archive files'
+      displayName: 'Archive repo root'
       inputs:
-        rootFolderOrFile: '$(System.DefaultWorkingDirectory)'
+        rootFolderOrFile: '$(Build.SourcesDirectory)'
         includeRootFolder: false
         archiveType: zip
-        archiveFile: $(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip
+        archiveFile: '$(Build.ArtifactStagingDirectory)/app.zip'
         replaceExistingArchive: true
 
-    - upload: $(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip
+    - publish: '$(Build.ArtifactStagingDirectory)/app.zip'
       artifact: drop
 
 - stage: DeployDevelopment
@@ -87,9 +93,10 @@ stages:
               azureSubscription: 'Azure-BarrioLink'
               appType: 'webAppLinux'
               appName: '$(APP_SERVICE_NAME)'
-              package: '$(Pipeline.Workspace)/drop/$(Build.BuildId).zip'
+              package: '$(Pipeline.Workspace)/drop/app.zip'
               runtimeStack: 'PYTHON|3.12'
-              appSettings: '-SECRET_KEY "$(SECRET_KEY)" -DEBUG "True" -DJANGO_SETTINGS_MODULE "app.settings" -DATABASE_URL "$(DATABASE_URL)" -ALLOWED_HOSTS "$(ALLOWED_HOSTS)"'
+              appSettings: |
+                -SCM_DO_BUILD_DURING_DEPLOYMENT false
 
 - stage: DeployProduction
   displayName: 'Deploy to Production'
@@ -111,6 +118,7 @@ stages:
               azureSubscription: 'Azure-BarrioLink'
               appType: 'webAppLinux'
               appName: '$(APP_SERVICE_NAME)'
-              package: '$(Pipeline.Workspace)/drop/$(Build.BuildId).zip'
+              package: '$(Pipeline.Workspace)/drop/app.zip'
               runtimeStack: 'PYTHON|3.12'
-              appSettings: '-SECRET_KEY "$(SECRET_KEY)" -DEBUG "False" -DJANGO_SETTINGS_MODULE "app.settings" -DATABASE_URL "$(DATABASE_URL)" -ALLOWED_HOSTS "$(ALLOWED_HOSTS)"'
+              appSettings: |
+                -SCM_DO_BUILD_DURING_DEPLOYMENT false

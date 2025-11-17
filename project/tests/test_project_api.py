@@ -54,7 +54,8 @@ class PrivateProjectApiTests(TestCase):
         self.client = APIClient()
         self.user = get_user_model().objects.create_user(
             'user@example.com',
-            'testpass'
+            'testpass',
+            role=get_user_model().Role.MEMBER,
         )
         self.client.force_authenticate(user=self.user)
 
@@ -95,3 +96,15 @@ class PrivateProjectApiTests(TestCase):
 
         serializer = ProjectDetailSerializer(project)
         self.assertEqual(res.data, serializer.data)
+
+    def test_registered_user_cannot_access_projects(self):
+        """Prueba que un usuario registrado básico no puede acceder a los proyectos."""
+        basic_user = get_user_model().objects.create_user(
+            'registered@example.com',
+            'testpass',
+            role=get_user_model().Role.REGISTERED,
+        )
+        self.client.force_authenticate(user=basic_user)
+
+        res = self.client.get(PROJECTS_URL)
+        self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)

@@ -16,15 +16,24 @@ class IsOwnerOrReadOnly(permissions.BasePermission):
         # Lectura pública
         if request.method in permissions.SAFE_METHODS:
             return True
-        # Escritura requiere autenticación
-        return request.user and request.user.is_authenticated
+        # Escritura requiere autenticación y rol de miembro
+        return (
+            request.user
+            and request.user.is_authenticated
+            and request.user.is_member
+        )
 
     def has_object_permission(self, request, view, obj):
         # Lectura pública
         if request.method in permissions.SAFE_METHODS:
             return True
-        # Solo el propietario puede modificar/eliminar
-        return obj.user == request.user
+        # Solo el propietario con rol de miembro puede modificar/eliminar
+        return (
+            request.user
+            and request.user.is_authenticated
+            and request.user.is_member
+            and obj.user == request.user
+        )
 
 
 @extend_schema(tags=['Event'])

@@ -42,7 +42,6 @@ DEBUG = os.environ.get('DEBUG', 'False').lower() in ('true', '1', 'yes')
 allowed_hosts_env = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1,0.0.0.0')
 ALLOWED_HOSTS = [host.strip() for host in allowed_hosts_env.split(',')]
 
-
 # Application definition
 
 INSTALLED_APPS = [
@@ -52,6 +51,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'corsheaders',
     'core',
     'rest_framework',
     'rest_framework.authtoken',
@@ -59,10 +59,22 @@ INSTALLED_APPS = [
     'user',
     'event',
     'news',
+    'certificates',
 ]
 
+# Email config (from .env)
+EMAIL_BACKEND = os.environ.get('EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend')
+EMAIL_HOST = os.environ.get('EMAIL_HOST', 'localhost')
+EMAIL_PORT = int(os.environ.get('EMAIL_PORT', 25))
+EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'False').lower() in ('true', '1', 'yes')
+EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
+DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'webmaster@localhost')
+
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.locale.LocaleMiddleware',  # Para detección automática de idioma
     'django.middleware.common.CommonMiddleware',
@@ -118,6 +130,16 @@ else:
         }
     }
 
+# Forzar el uso de psycopg3 para todas las conexiones
+import django.db.backends.postgresql.base as postgresql_base
+try:
+    import psycopg as Database
+    postgresql_base.Database = Database
+except ImportError:
+    # Fallback a psycopg2 si psycopg no está disponible
+    import psycopg2 as Database
+    postgresql_base.Database = Database
+
 
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
@@ -171,6 +193,15 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'  # Para collectstatic
 STATICFILES_DIRS = [
     BASE_DIR / 'static',
 ]
+STORAGES = {
+    'staticfiles': {
+        'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
+    },
+}
+
+# Media (uploads de usuario, certificados, etc.)
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
@@ -189,3 +220,49 @@ SPECTACULAR_SETTINGS = {
     'DESCRIPTION': 'API REST para BarrioLink',
     'VERSION': '1.0.0',
 }
+
+# =============================================
+# CORS (Cross-Origin Resource Sharing) Settings
+# =============================================
+
+# CORS configuration for production and development
+CORS_ALLOWED_ORIGINS = []
+
+# Get CORS origins from environment variable
+cors_origins_env = os.environ.get('CORS_ALLOWED_ORIGINS', '')
+if cors_origins_env:
+    CORS_ALLOWED_ORIGINS = [origin.strip() for origin in cors_origins_env.split(',')]
+
+# Development settings - Allow all origins if DEBUG is True
+if DEBUG:
+    CORS_ALLOW_ALL_ORIGINS = True
+    print("DEBUG=True: CORS allowing all origins")
+else:
+    CORS_ALLOW_ALL_ORIGINS = False
+    print(f"PRODUCTION: CORS limited to: {CORS_ALLOWED_ORIGINS}")
+
+# CORS Headers that can be used during the actual request
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
+
+# CORS Methods that are allowed
+CORS_ALLOWED_METHODS = [
+    'DELETE',
+    'GET',
+    'OPTIONS',
+    'PATCH',
+    'POST',
+    'PUT',
+]
+
+# Allow credentials (cookies, authorization headers)
+CORS_ALLOW_CREDENTIALS = True
