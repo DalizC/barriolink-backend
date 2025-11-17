@@ -318,3 +318,61 @@ class Project(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class Certificate(models.Model):
+    """Modelo de Certificado emitido para un usuario.
+
+    Actualmente solo se usa para certificados de residencia.
+    """
+
+    class Status(models.TextChoices):
+        ACTIVE = ('active', 'Activo')
+        EXPIRED = ('expired', 'Expirado')
+        REVOKED = ('revoked', 'Revocado')
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='certificates',
+    )
+    title = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    file = models.FileField(upload_to='certificates/', blank=True, null=True)
+    issued_at = models.DateField()
+    expires_at = models.DateField(blank=True, null=True)
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.ACTIVE,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    # Campos legacy para potencial almacenamiento futuro (no usados en on-demand):
+    pdf_file = models.FileField(upload_to='certificates/', blank=True, null=True)
+    pdf_generated_at = models.DateTimeField(blank=True, null=True)
+
+    class Meta:
+        ordering = ['-issued_at', '-created_at']
+
+    def __str__(self):
+        return f"{self.title} - {self.user.email}"
+
+    def pdf_bytes(self) -> tuple[bytes, str]:
+        """Renderizar el PDF en memoria y retornar (bytes, file_name).
+
+        Implementación on-demand: no se persiste en disco ni en FileField.
+        """
+        try:
+            from certificates.services import generate_certificate_pdf_bytes
+        except ImportError:
+            raise RuntimeError('Servicio de generación de PDF no disponible.')
+
+        return generate_certificate_pdf_bytes(self)
+
+    def generate_pdf(self, force=False):
+        """[DEPRECADO] Mantenido por compatibilidad. Genera el PDF en memoria.
+
+        Retorna bytes del PDF. No guarda archivo. El parámetro force no tiene efecto.
+        """
+        pdf_bytes, _ = self.pdf_bytes()
+        return pdf_bytes

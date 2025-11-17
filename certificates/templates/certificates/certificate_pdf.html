@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Certificado de Residencia</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin:40px; }
+        .box { border:2px solid #444; padding:30px; border-radius:12px; }
+        h1 { text-align:center; margin-bottom:10px; color: red}
+        .meta { font-size:12px; color:#666; margin-top:30px; }
+    </style>
+</head>
+<body>
+    <div class="box">
+        <h1>Certificado de Residencia</h1>
+        <p>Se certifica que <strong>{{ cert.user.name }}</strong> mantiene registro de residencia en el sistema BarrioLink.</p>
+        <p><strong>Título:</strong> <em>{{ cert.title }}</em></p>
+        <p><strong>Emitido el:</strong> {{ cert.issued_at }}</p>
+        {% if cert.expires_at %}
+        <p><strong>Válido hasta:</strong> {{ cert.expires_at }}</p>
+        {% endif %}
+        <p><strong>Estado:</strong> {{ cert.status }}</p>
+        <div class="meta">Generado automáticamente por BarrioLink.</div>
+    </div>
+</body>
+</html>
