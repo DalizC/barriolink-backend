@@ -76,13 +76,17 @@ def send_certificate_email(certificate, to_email: str):
 
     subject = f"Certificado: {certificate.title}"
 
-    # Intenta usar el template HTML para el email
-    if template_exists('certificates/email_certificate.html'):
+    # Intenta usar el template HTML para el email (sin verificación previa)
+    try:
         html_body = render_to_string('certificates/email_certificate.html', context)
         email = EmailMessage(subject, html_body, to=[to_email])
         email.content_subtype = 'html'  # Importante: indica que el cuerpo es HTML
-    else:
-        # Fallback a texto plano
+        print(f"✓ Template 'certificates/email_certificate.html' renderizado exitosamente")
+    except Exception as e:
+        # Fallback a texto plano si el template falla
+        import traceback
+        print(f"✗ Error renderizando email template:")
+        print(traceback.format_exc())
         body = "Adjunto encontrarás tu certificado de residencia."
         email = EmailMessage(subject, body, to=[to_email])
 
@@ -115,33 +119,56 @@ def _generate_pdf_reportlab(certificate) -> tuple[bytes, str]:
     c.setTitle(title)
 
     # Encabezado
-    c.setFont('Helvetica-Bold', 20)
+    c.setFont('Helvetica-Bold', 24)
     c.drawCentredString(width/2, height - 30*mm, title)
 
-    # Contenido
+    # Línea separadora
+    c.setLineWidth(1)
+    c.line(20*mm, height - 35*mm, width - 20*mm, height - 35*mm)
+
+    # Contenido principal
     c.setFont('Helvetica', 12)
-    y = height - 50*mm
-    lines = [
-        f"Nombre: {getattr(certificate.user, 'name', certificate.user.email)}",
-        f"Título: {certificate.title}",
-        f"Emitido el: {certificate.issued_at}",
+    y = height - 45*mm
+
+    # Nombre del solicitante
+    c.setFont('Helvetica-Bold', 12)
+    c.drawString(25*mm, y, 'Solicitante:')
+    c.setFont('Helvetica', 12)
+    y -= 6*mm
+    c.drawString(25*mm, y, getattr(certificate.user, 'name', certificate.user.email))
+    y -= 12*mm
+
+    # Información del certificado
+    info_lines = [
+        ('Título:', certificate.title),
+        ('Emitido el:', str(certificate.issued_at)),
     ]
     if certificate.expires_at:
-        lines.append(f"Válido hasta: {certificate.expires_at}")
-    lines.append(f"Estado: {certificate.status}")
-    if certificate.description:
-        lines.append("")
-        lines.append("Descripción:")
-        desc_lines = textwrap.wrap(certificate.description, width=90)
-        lines.extend(desc_lines)
+        info_lines.append(('Válido hasta:', str(certificate.expires_at)))
 
-    for line in lines:
-        c.drawString(25*mm, y, line)
+    for label, value in info_lines:
+        c.setFont('Helvetica-Bold', 11)
+        c.drawString(25*mm, y, label)
+        c.setFont('Helvetica', 11)
+        c.drawString(60*mm, y, value)
         y -= 8*mm
 
+    # Descripción si existe
+    if certificate.description:
+        y -= 4*mm
+        c.setFont('Helvetica-Bold', 11)
+        c.drawString(25*mm, y, 'Descripción:')
+        y -= 6*mm
+        c.setFont('Helvetica', 10)
+        desc_lines = textwrap.wrap(certificate.description, width=80)
+        for line in desc_lines:
+            c.drawString(25*mm, y, line)
+            y -= 6*mm
+
     # Pie de página
-    c.setFont('Helvetica-Oblique', 10)
-    c.drawCentredString(width/2, 20*mm, 'Generado automáticamente por BarrioLink')
+    c.setFont('Helvetica-Oblique', 9)
+    c.drawCentredString(width/2, 15*mm, 'Generado automáticamente por BarrioLink®')
+    c.drawCentredString(width/2, 10*mm, f'Fecha: {certificate.issued_at}')
 
     c.showPage()
     c.save()
