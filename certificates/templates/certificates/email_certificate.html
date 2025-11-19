@@ -3,31 +3,21 @@
 <head>
     <meta charset="utf-8">
     <title>Certificado BarrioLink</title>
-    <style>
-        body { font-family: Arial, sans-serif; }
-        .content { background: #f7f7f7; padding: 30px; border-radius: 8px; }
-        .footer { font-size: 12px; color: #888; margin-top: 30px; }
-        /* Email-safe image centering: many clients strip advanced CSS */
-        img {
-            display: block;
-            margin: 0 auto 20px;
-            height: 90px;
-        }
-    </style>
 </head>
-<body>
-    <div class="content"><img src="logo_barriolink.png" alt="BarrioLink Logo" style="display:block; margin:0 auto 20px; height:90px;"/>
-        <h2>¡Hola {{ cert.user.name }}!</h2>
-        <p>Adjuntamos tu certificado de residencia emitido por BarrioLink.</p>
-        <p><strong>Título:</strong> {{ cert.title }}</p>
-        <p><strong>Emitido el:</strong> {{ cert.issued_at }}</p>
+<body style="font-family: Arial, sans-serif; margin: 0; padding: 0;">
+    <div style="background: #f7f7f7; padding: 30px; border-radius: 8px; max-width: 600px; margin: 0 auto;">
+        <img src="logo_barriolink.png" alt="BarrioLink Logo" style="display: block; margin: 0 auto 20px; height: 90px;"/>
+        <h2 style="color: #333; margin-bottom: 15px;">¡Hola {{ cert.user.name }}!</h2>
+        <p style="color: #555; line-height: 1.6; margin: 10px 0;">Adjuntamos tu certificado de residencia emitido por BarrioLink.</p>
+        <p style="color: #555; line-height: 1.6; margin: 10px 0;"><strong>Título:</strong> {{ cert.title }}</p>
+        <p style="color: #555; line-height: 1.6; margin: 10px 0;"><strong>Emitido el:</strong> {{ cert.issued_at }}</p>
         {% if cert.expires_at %}
-        <p><strong>Válido hasta:</strong> {{ cert.expires_at }}</p>
+        <p style="color: #555; line-height: 1.6; margin: 10px 0;"><strong>Válido hasta:</strong> {{ cert.expires_at }}</p>
         {% endif %}
         <br>
-        <p>Correo enviado automáticamente por BarrioLink &reg;. No responder.</p>
+        <p style="color: #555; line-height: 1.6; margin: 10px 0; font-size: 12px;">Correo enviado automáticamente por BarrioLink &reg;. No responder.</p>
     </div>
-    <div class="footer">
+    <div style="font-size: 12px; color: #888; margin-top: 30px; text-align: center;">
         BarrioLink &copy; {{ now|date:"Y" }}
     </div>
 </body>
