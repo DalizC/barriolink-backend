@@ -8,6 +8,33 @@ from django.core.exceptions import ValidationError
 from django.db.models import F, Q
 from django.utils import timezone
 
+from .validators import validate_national_id_format
+
+
+class Tenant(models.Model):
+    """Modelo de Barrio/Comunidad (organización multi-tenant)."""
+    name = models.CharField(max_length=255, help_text='Nombre del barrio o junta de vecinos')
+    national_id = models.CharField(
+        max_length=50,
+        blank=True,
+        help_text='RUT, Tax ID, o identificador nacional',
+        validators=[validate_national_id_format],
+    )
+    slug = models.SlugField(unique=True, help_text='Identificador único en URL')
+    address = models.CharField(max_length=500, blank=True)
+    contact_email = models.EmailField(blank=True)
+    contact_phone = models.CharField(max_length=20, blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['name']
+        verbose_name = 'Tenant'
+        verbose_name_plural = 'Tenants'
+
+    def __str__(self):
+        return self.name
+
 
 class UserManager(BaseUserManager):
     """Manager para usuarios."""
@@ -44,8 +71,22 @@ class User(AbstractBaseUser, PermissionsMixin):
         MEMBER = ('member', 'Miembro')
         ADMIN = ('admin', 'Administrador')
 
+    tenant = models.ForeignKey(
+        'Tenant',
+        on_delete=models.CASCADE,
+        related_name='users',
+        help_text='Barrio/Comunidad al que pertenece el usuario',
+        null=True,
+        blank=True,
+    )
     email = models.EmailField(max_length=255, unique=True)
     name = models.CharField(max_length=255)
+    national_id = models.CharField(
+        max_length=50,
+        blank=True,
+        help_text='RUT, DNI, o identificador nacional',
+        validators=[validate_national_id_format],
+    )
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
     role = models.CharField(
@@ -143,6 +184,13 @@ class Application(models.Model):
 class Facility(models.Model):
     """Modelo de Espacio Comunitario (instalación gestionada)."""
 
+    tenant = models.ForeignKey(
+        'Tenant',
+        on_delete=models.CASCADE,
+        related_name='facilities',
+        null=True,
+        blank=True,
+    )
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -169,6 +217,13 @@ class Event(models.Model):
         CANCELLED = ('cancelled', 'Cancelado')
         COMPLETED = ('completed', 'Completado')
 
+    tenant = models.ForeignKey(
+        'Tenant',
+        on_delete=models.CASCADE,
+        related_name='events',
+        null=True,
+        blank=True,
+    )
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -220,6 +275,13 @@ class Booking(models.Model):
         PENDING = ('pending', 'Pendiente')
         CANCELLED = ('cancelled', 'Cancelada')
 
+    tenant = models.ForeignKey(
+        'Tenant',
+        on_delete=models.CASCADE,
+        related_name='bookings',
+        null=True,
+        blank=True,
+    )
     facility = models.ForeignKey(
         Facility,
         on_delete=models.PROTECT,
@@ -290,6 +352,13 @@ class Booking(models.Model):
 
 class News(models.Model):
     """Modelo de Noticia."""
+    tenant = models.ForeignKey(
+        'Tenant',
+        on_delete=models.CASCADE,
+        related_name='news',
+        null=True,
+        blank=True,
+    )
     author = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -304,6 +373,13 @@ class News(models.Model):
 
 class Project(models.Model):
     """Modelo de Proyecto Comunitario."""
+    tenant = models.ForeignKey(
+        'Tenant',
+        on_delete=models.CASCADE,
+        related_name='projects',
+        null=True,
+        blank=True,
+    )
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -331,6 +407,13 @@ class Certificate(models.Model):
         EXPIRED = ('expired', 'Expirado')
         REVOKED = ('revoked', 'Revocado')
 
+    tenant = models.ForeignKey(
+        'Tenant',
+        on_delete=models.CASCADE,
+        related_name='certificates',
+        null=True,
+        blank=True,
+    )
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,

@@ -4,23 +4,97 @@
     <meta charset="utf-8">
     <title>Certificado de Residencia</title>
     <style>
-        body { font-family: Arial, sans-serif; margin:40px; }
-        .box { border:2px solid #444; padding:30px; border-radius:12px; }
-        h1 { text-align:center; margin-bottom:10px; color: red}
-        .meta { font-size:12px; color:#666; margin-top:30px; }
+        body {
+            font-family: Arial, sans-serif;
+            margin:10px 20px 10px 20px;
+        }
+        .box {
+            padding:30px; border-radius:12px;
+        }
+        h1 {
+            text-align:center;
+            margin-bottom:30px;
+            margin-top: -10px;
+            color: grey;
+            font-weight: 500;
+            text-transform: uppercase;
+            font-size: 20px;
+        }
+        .meta {
+            font-size:12px;
+            color:#666;
+            margin-top:50px;
+        }
+        .header {
+            width: 100%;
+            height: 100px;
+            background-color: transparent;
+            margin-bottom: 40px;
+        }
+        .signature {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            margin-top: 40px;
+        }
+        .signature img {
+            display: block;
+            margin: 0 auto 8px auto;
+        }
+        .signature hr {
+            width: 140px;
+            border: none;
+            border-top: 1px solid #444;
+            margin-bottom:12px;
+        }
+        .signature h5, .signature h6 {
+            margin: 0;
+            font-weight: 500;
+        }
+        .signature h5 { font-size: 14px; margin-bottom: 5px;}
+        .signature h6 { font-size: 11px; color:#555; margin-bottom: 30px;}
+        .logo_gob {
+            height: 80px;
+            background-color: transparent;
+            margin:10px 20px;
+        }
+        .logo_barriolink {
+            height: 85px;
+            background-color: transparent;
+            margin:7px 20px;
+        }
     </style>
 </head>
 <body>
+    <div class="header">
+        <div class="row">
+            <div class="col" style="float: left;">
+                <img class="logo_gob" src="logo_gob.png" alt="BarrioLink Logo">
+            </div>
+            <div class="col" style="float: right;">
+                <img class="logo_barriolink" src="logo_barriolink.png" alt="Certificate Seal">
+            </div>
+        </div>
+    </div>
     <div class="box">
         <h1>Certificado de Residencia</h1>
-        <p>Se certifica que <strong>{{ cert.user.name }}</strong> mantiene registro de residencia en el sistema BarrioLink.</p>
-        <p><strong>Título:</strong> <em>{{ cert.title }}</em></p>
+        <p>La junta de vecinos <strong>"{{ cert.tenant.name }}"</strong>, RUT {{ cert.tenant.national_id }}, certifica que: </p>
+        <p>{{ cert.user.name }}, RUT {{ cert.user.national_id }}, mantiene registro de residencia vigente en {{ cert.user.address }}.</p>
+        <p>Se extiende el presente certificado para los efectos que el solicitante estime convenientes.</p>
+        <br>
         <p><strong>Emitido el:</strong> {{ cert.issued_at }}</p>
         {% if cert.expires_at %}
         <p><strong>Válido hasta:</strong> {{ cert.expires_at }}</p>
         {% endif %}
-        <p><strong>Estado:</strong> {{ cert.status }}</p>
-        <div class="meta">Generado automáticamente por BarrioLink.</div>
+        <div class="signature">
+            <img src="signature.png" alt="Signature" style="height: 100px;">
+            <hr>
+            <h5>Roberto González Cepeda</h5>
+            <h6>Presidente de la Junta de Vecinos {{ cert.tenant.name }}</h6>
+        </div>
+        <div class="meta">Generado automáticamente por BarrioLink.&reg;</div>
     </div>
 </body>
 </html>

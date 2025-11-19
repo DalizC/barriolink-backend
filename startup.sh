@@ -11,10 +11,10 @@ apt-get install -y \
     shared-mime-info
 
 echo ">>> [startup] Asegurando dependencias Python..."
-cd /home/site/wwwroot
-pip install --no-cache-dir -r requirements.txt
+#cd /home/site/wwwroot
+#pip install --no-cache-dir -r requirements.txt
 
-echo ">>> [startup] Lanzando gunicorn..."
-: "${DJANGO_WSGI_MODULE:=app.wsgi:application}"
+#echo ">>> [startup] Lanzando gunicorn..."
+#: "${DJANGO_WSGI_MODULE:=app.wsgi:application}"
 
 gunicorn --bind=0.0.0.0:${PORT:-8000} "$DJANGO_WSGI_MODULE"
