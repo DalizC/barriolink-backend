@@ -32,7 +32,7 @@ class IsAuthorOrReadOnly(permissions.BasePermission):
 			request.user
 			and request.user.is_authenticated
 			and request.user.is_member
-			and obj.author == request.user
+			and (obj.author == request.user or request.user.is_admin)
 		)
 
 
@@ -44,7 +44,7 @@ class NewsViewSet(viewsets.ModelViewSet):
 	- POST: usuarios autenticados
 	- PUT/PATCH/DELETE: solo autor
 	"""
-	queryset = News.objects.filter(published=True).order_by('-id')
+	queryset = News.objects.filter(tenant_id=1, published=True).order_by('-id')
 	serializer_class = NewsSerializer
 	authentication_classes = [TokenAuthentication]
 	permission_classes = [IsAuthorOrReadOnly]
@@ -55,4 +55,7 @@ class NewsViewSet(viewsets.ModelViewSet):
 		return NewsSerializer
 
 	def perform_create(self, serializer):
-		serializer.save(author=self.request.user)
+		serializer.save(
+            author=self.request.user,
+            tenant_id=1,
+        )

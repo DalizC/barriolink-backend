@@ -10,15 +10,15 @@ class NewsSerializer(serializers.ModelSerializer):
     """Serializer para el modelo News."""
 
     author = serializers.StringRelatedField(read_only=True)
+    tenant = serializers.PrimaryKeyRelatedField(read_only=True)
 
     class Meta:
         model = News
-        fields = ['id', 'title', 'content', 'author', 'published', 'link']
-        read_only_fields = ['id', 'author']
+        fields = ['id', 'tenant', 'title', 'content', 'author', 'published', 'link']
+        read_only_fields = ['id', 'author', 'tenant']
 
 
 class NewsDetailSerializer(NewsSerializer):
     """Serializer detallado para noticias."""
 
-    class Meta(NewsSerializer.Meta):
-        fields = NewsSerializer.Meta.fields
+    pass

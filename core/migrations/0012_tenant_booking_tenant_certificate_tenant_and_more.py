@@ -7,14 +7,16 @@ from django.db import migrations, models
 def create_default_tenant(apps, schema_editor):
     """Crear un tenant por defecto para migración de datos existentes."""
     Tenant = apps.get_model('core', 'Tenant')
-    Tenant.objects.create(
+    Tenant.objects.update_or_create(
         id=1,
-        name='Barrio Principal',
-        slug='barrio-principal',
-        address='Calle Falsa 123, Viña del Mar, Chile',
-        contact_email='',
-        contact_phone='',
-        is_active=True,
+        defaults={
+            "name": "Barrio Principal",
+            "slug": "barrio-principal",
+            "address": "Calle Falsa 123, Viña del Mar, Chile",
+            "contact_email": "",
+            "contact_phone": "",
+            "is_active": True,
+        },
     )
 
 
