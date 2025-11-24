@@ -32,8 +32,9 @@ class PrivateNewsApiTests(TestCase):
         defaults = {
             'title': 'Noticia de prueba',
             'content': 'Contenido de la noticia de prueba',
-            'published': False,
+            'status': 'draft',
             'link': 'http://example.com/noticia-prueba',
+            'tenant_id': 1,  # Necesario ahora
         }
         defaults.update(params)
         return News.objects.create(author=user, **defaults)

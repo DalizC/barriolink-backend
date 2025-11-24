@@ -79,11 +79,16 @@ class ModelTests(TestCase):
             email='user@example.com',
             password='Testpass123'
         )
+        tenant = models.Tenant.objects.create(
+            name="Tenant Test",
+            slug="tenant-test",
+        )
         news = models.News.objects.create(
             title='Noticia de prueba',
             content='Contenido de la noticia',
             author=user,
-            published=True,
+            tenant=tenant,
+            status='draft',
         )
         self.assertEqual(str(news), news.title)
 
