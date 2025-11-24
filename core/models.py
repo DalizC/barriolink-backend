@@ -352,21 +352,68 @@ class Booking(models.Model):
 
 class News(models.Model):
     """Modelo de Noticia."""
+        # TODO: Analizar si STATUS requiere publicación programada (en el futuro)
+    STATUS_CHOICES = [
+        ('draft', 'Draft'),
+        ('published', 'Published'),
+        ('archived', 'Archived'),
+    ]
+
     tenant = models.ForeignKey(
         'Tenant',
         on_delete=models.CASCADE,
-        related_name='news',
-        null=True,
-        blank=True,
+        related_name='news'
     )
     author = models.ForeignKey(
         settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
+        on_delete=models.CASCADE
     )
+
+    # Categorías
+    categories = models.ManyToManyField(
+        'Category',
+        blank=True,
+        related_name='news_items'
+    )
+
+    # Contenido
     title = models.CharField(max_length=255)
     content = models.TextField(blank=True)
-    published = models.BooleanField(default=False)
-    link = models.URLField(max_length=200, blank=True)
+    summary = models.CharField(max_length=300, blank=True)  # TODO: Generar el resumen automáticamente
+
+    link = models.URLField(blank=True)  # TODO: Será necesario?
+    cover_image = models.URLField(blank=True)  # TODO: Cambiar de URLField a ImageField o FileField. post-MVP
+
+    # Estado
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='draft'
+    )
+
+    # Publicación
+    published_at = models.DateTimeField(null=True, blank=True)
+    published_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='published_news'
+    )
+
+    # Archivado
+    archived_at = models.DateTimeField(null=True, blank=True)
+    archived_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='archived_news'
+    )
+
+    # Auditoría
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return self.title
@@ -459,3 +506,27 @@ class Certificate(models.Model):
         """
         pdf_bytes, _ = self.pdf_bytes()
         return pdf_bytes
+
+
+class Category(models.Model):
+    """
+    Categoría para Noticias y Eventos.
+    """
+    name = models.CharField(max_length=100, unique=True)
+    slug = models.SlugField(max_length=120, unique=True)
+    description = models.TextField(blank=True)
+    is_active = models.BooleanField(default=True)
+
+    tenant = models.ForeignKey(
+        'core.Tenant',
+        on_delete=models.CASCADE,
+        related_name='categories'
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name

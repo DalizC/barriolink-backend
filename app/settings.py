@@ -60,6 +60,7 @@ INSTALLED_APPS = [
     'event',
     'news',
     'certificates',
+    'category',
 ]
 
 # Email config (from .env)

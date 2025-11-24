@@ -3,7 +3,7 @@ Serializers para la API de noticias.
 """
 from rest_framework import serializers
 
-from core.models import News
+from core.models import News, Category
 
 
 class NewsSerializer(serializers.ModelSerializer):
@@ -11,6 +11,11 @@ class NewsSerializer(serializers.ModelSerializer):
 
     author = serializers.StringRelatedField(read_only=True)
     tenant = serializers.PrimaryKeyRelatedField(read_only=True)
+    categories = serializers.PrimaryKeyRelatedField(
+        many=True,
+        queryset=Category.objects.all(),
+        required=False,
+    )
 
     class Meta:
         model = News

@@ -44,7 +44,11 @@ class NewsViewSet(viewsets.ModelViewSet):
 	- POST: usuarios autenticados
 	- PUT/PATCH/DELETE: solo autor
 	"""
-	queryset = News.objects.filter(tenant_id=1, published=True).order_by('-id')
+	queryset = (
+		News.objects.filter(tenant_id=1, status='published')
+			.prefetch_related('categories')
+			.order_by('-created_at')
+		)
 	serializer_class = NewsSerializer
 	authentication_classes = [TokenAuthentication]
 	permission_classes = [IsAuthorOrReadOnly]
@@ -59,3 +63,12 @@ class NewsViewSet(viewsets.ModelViewSet):
             author=self.request.user,
             tenant_id=1,
         )
+
+	def get_queryset(self):
+		queryset = super().get_queryset()
+		category_id = self.request.query_params.get('category')
+
+		if category_id:
+			queryset = queryset.filter(categories__id=category_id)
+
+		return queryset
