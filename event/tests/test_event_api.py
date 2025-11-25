@@ -6,6 +6,7 @@ from datetime import timedelta
 from django.test import TestCase
 from django.urls import reverse
 from django.contrib.auth import get_user_model
+from django.utils import timezone
 
 from rest_framework import status
 from rest_framework.test import APIClient
@@ -24,15 +25,15 @@ def detail_url(event_id):
 
 
 def create_event(user, **params):
-    """Crear y retornar un evento de prueba."""
+    """Crear y retornar un nuevo evento."""
     defaults = {
         'title': 'Evento de prueba',
         'description': 'Descripción del evento de prueba',
         'location': 'Ubicación del evento de prueba',
         'address': 'Calle Falsa 123',
         'address_url': 'http://example.com/evento-prueba',
-        'date': '2024-06-15',
-        'duration': timedelta(hours=2),
+        'start_datetime': timezone.now() + timedelta(days=1),
+        'end_datetime': timezone.now() + timedelta(days=1, hours=2),
     }
     defaults.update(params)
     return Event.objects.create(user=user, **defaults)
@@ -69,13 +70,16 @@ class PrivateEventApiTests(TestCase):
 
         res = self.client.get(EVENTS_URL)
 
-        events = Event.objects.all().order_by('-id')
+        # Usar el mismo orden que el ViewSet (-created_at, -start_datetime)
+        events = Event.objects.all().order_by('-created_at', '-start_datetime')
         serializer = EventSerializer(events, many=True)
         self.assertEqual(res.status_code, status.HTTP_200_OK)
-        self.assertEqual(res.data, serializer.data)
+        # Verificar que la respuesta tiene paginación
+        self.assertIn('results', res.data)
+        self.assertEqual(res.data['results'], serializer.data)
 
     def test_event_list_limited_to_user(self):
-        """Prueba que la lista de eventos está limitada al usuario autenticado."""
+        """Prueba que la lista de eventos está limitada al tenant del usuario autenticado."""
         other_user = get_user_model().objects.create_user(
             'other@example.com',
             'testpass'
@@ -85,10 +89,13 @@ class PrivateEventApiTests(TestCase):
 
         res = self.client.get(EVENTS_URL)
 
-        events = Event.objects.filter(user=self.user).order_by('-id')
+        # Ambos usuarios no tienen tenant, entonces ven todos los eventos con tenant=None
+        events = Event.objects.filter(tenant_id__isnull=True).order_by('-created_at', '-start_datetime')
         serializer = EventSerializer(events, many=True)
         self.assertEqual(res.status_code, status.HTTP_200_OK)
-        self.assertEqual(res.data, serializer.data)
+        self.assertIn('results', res.data)
+        self.assertEqual(len(res.data['results']), 2)  # Ambos eventos son visibles
+        self.assertEqual(res.data['results'], serializer.data)
 
     def test_get_event_detail(self):
         """Prueba obtener el detalle de un evento."""
@@ -162,8 +169,6 @@ class PrivateEventApiTests(TestCase):
             location='Ubicación original',
             address='Calle Original 789',
             address_url='http://example.com/evento-original',
-            date='2024-08-10',
-            duration=timedelta(hours=1),
         )
 
         payload = {
@@ -172,8 +177,6 @@ class PrivateEventApiTests(TestCase):
             'location': 'Ubicación actualizada',
             'address': 'Calle Actualizada 101',
             'address_url': 'http://example.com/evento-actualizado',
-            'date': '2024-09-15',
-            'duration': '02:00:00',
         }
         url = detail_url(event.id)
         res = self.client.put(url, payload)

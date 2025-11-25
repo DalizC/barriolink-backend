@@ -1,13 +1,14 @@
 from django.test import TestCase
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
+from django.utils import timezone
 
 from rest_framework.test import APIRequestFactory, force_authenticate
 
 from core.permissions import IsMemberUser, IsAdminRoleUser, IsOwnerOrAdmin
 from core.models import Event
 
-import datetime
+from datetime import timedelta
 
 
 class PermissionsTest(TestCase):
@@ -27,8 +28,8 @@ class PermissionsTest(TestCase):
         self.event_owned_by_member = Event.objects.create(
             user=self.member,
             title='Member Event',
-            date=datetime.date.today(),
-            duration=datetime.timedelta(hours=1),
+            start_datetime=timezone.now() + timedelta(days=1),
+            end_datetime=timezone.now() + timedelta(days=1, hours=1),
             capacity=10,
             location='L1',
             address='A1',
@@ -37,8 +38,8 @@ class PermissionsTest(TestCase):
         self.event_owned_by_reg = Event.objects.create(
             user=self.registered,
             title='Reg Event',
-            date=datetime.date.today(),
-            duration=datetime.timedelta(hours=2),
+            start_datetime=timezone.now() + timedelta(days=2),
+            end_datetime=timezone.now() + timedelta(days=2, hours=2),
             capacity=5,
             location='L2',
             address='A2',

@@ -6,6 +6,7 @@ from datetime import timedelta
 
 from django.test import TestCase
 from django.contrib.auth import get_user_model
+from django.utils import timezone
 
 from core import models
 
@@ -68,8 +69,8 @@ class ModelTests(TestCase):
             location='Ubicación del evento',
             address='Calle Falsa 123',
             address_url='http://example.com/evento-prueba',
-            date='2025-12-31',
-            duration=timedelta(hours=4, minutes=30),  # 4.5 horas
+            start_datetime=timezone.now() + timedelta(days=1),
+            end_datetime=timezone.now() + timedelta(days=1, hours=4, minutes=30),
         )
         self.assertEqual(str(event), event.title)
 

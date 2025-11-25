@@ -196,26 +196,47 @@ class Facility(models.Model):
         on_delete=models.CASCADE,
     )
     name = models.CharField(max_length=255)
+    slug = models.SlugField(max_length=255, blank=True, help_text='Slug autogenerado a partir del nombre')
     description = models.TextField(blank=True)
     address = models.CharField(max_length=255)
     capacity = models.IntegerField()
+    is_active = models.BooleanField(default=True)
+    amenities = models.TextField(blank=True, help_text='Lista libre de comodidades, una por línea')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         verbose_name = 'Facility'
         verbose_name_plural = 'Facilities'
         ordering = ['name']
+        unique_together = ('tenant', 'slug')
 
     def __str__(self):
         return self.name
+
+    def save(self, *args, **kwargs):
+        from django.utils.text import slugify
+        if not self.slug:
+            self.slug = slugify(self.name)[:255]
+        super().save(*args, **kwargs)
 
 
 class Event(models.Model):
     """Modelo de Evento o actividad comunitaria."""
 
     class Status(models.TextChoices):
+        PENDING = ('pending', 'Pendiente de aprobación')
         SCHEDULED = ('scheduled', 'Programado')
         CANCELLED = ('cancelled', 'Cancelado')
         COMPLETED = ('completed', 'Completado')
+
+    class RecurrenceType(models.TextChoices):
+        NONE = ('none', 'Evento único')
+        DAILY = ('daily', 'Diario')
+        WEEKLY = ('weekly', 'Semanal')
+        BIWEEKLY = ('biweekly', 'Bisemanal')
+        MONTHLY = ('monthly', 'Mensual')
+        CUSTOM = ('custom', 'Personalizado')
 
     tenant = models.ForeignKey(
         'Tenant',
@@ -227,15 +248,19 @@ class Event(models.Model):
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
+        help_text='Usuario creador del evento'
     )
     title = models.CharField(max_length=255)
+    slug = models.SlugField(max_length=255, blank=True, help_text='Slug autogenerado a partir del título')
     description = models.TextField(blank=True)
     status = models.CharField(
         max_length=20,
         choices=Status.choices,
-        default=Status.SCHEDULED,
+        default=Status.PENDING,
+        help_text='Estado del evento (PENDING requiere aprobación de admin)'
     )
-    is_public = models.BooleanField(default=True)
+    is_active = models.BooleanField(default=True, help_text='Si el evento está activo/visible')
+    is_public = models.BooleanField(default=True, help_text='Si el evento es público o privado')
     facility = models.ForeignKey(
         'Facility',
         on_delete=models.SET_NULL,
@@ -250,21 +275,367 @@ class Event(models.Model):
     )
     address = models.CharField(max_length=255, blank=True)
     address_url = models.URLField(max_length=500, blank=True, null=True)
-    date = models.DateField()
-    duration = models.DurationField()
+
+    # Fecha y hora (timezone-aware para manejo correcto de horario de verano)
+    start_datetime = models.DateTimeField(
+        help_text='Fecha y hora de inicio del evento'
+    )
+    end_datetime = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='Fecha y hora de fin del evento (opcional para eventos sin hora de fin definida)'
+    )
+
+    # Recurrencia
+    recurrence_type = models.CharField(
+        max_length=20,
+        choices=RecurrenceType.choices,
+        default=RecurrenceType.NONE,
+        help_text='Tipo de recurrencia del evento'
+    )
+    recurrence_end_date = models.DateField(
+        null=True,
+        blank=True,
+        help_text='Fecha hasta la cual se repite el evento (solo si tiene recurrencia)'
+    )
+    recurrence_interval = models.IntegerField(
+        default=1,
+        help_text='Intervalo de recurrencia (ej: cada 2 semanas para bisemanal)'
+    )
+    recurrence_days_of_week = models.CharField(
+        max_length=20,
+        blank=True,
+        help_text='Días de la semana para recurrencia semanal (ej: "1,3,5" para L-M-V)'
+    )
+
+    # Configuración de inscripciones
+    requires_registration = models.BooleanField(
+        default=False,
+        help_text='Si el evento requiere inscripción previa'
+    )
+    registration_deadline = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='Fecha límite para inscribirse (si no se especifica, hasta el inicio del evento)'
+    )
+    auto_confirm_registration = models.BooleanField(
+        default=True,
+        help_text='Si True: confirmación automática. Si False: requiere aprobación manual'
+    )
+    members_only = models.BooleanField(
+        default=False,
+        help_text='Si True: solo usuarios con rol member pueden inscribirse'
+    )
+
+    # Configuración de pagos (preparado para futuro)
+    has_cost = models.BooleanField(
+        default=False,
+        help_text='Si el evento tiene costo (futuro: integración de pagos)'
+    )
+    cost_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        help_text='Monto del evento (0 = gratuito)'
+    )
+    cost_currency = models.CharField(
+        max_length=3,
+        default='CLP',
+        help_text='Moneda (CLP, USD, etc.)'
+    )
+
     capacity = models.IntegerField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ['-date', 'title']
+        ordering = ['-created_at', '-start_datetime']
+        verbose_name = 'Event'
+        verbose_name_plural = 'Events'
+        unique_together = ('tenant', 'slug')
+        constraints = [
+            models.CheckConstraint(
+                check=Q(end_datetime__isnull=True) | Q(end_datetime__gt=F('start_datetime')),
+                name='event_end_after_start',
+            ),
+            models.CheckConstraint(
+                check=Q(facility__isnull=True) | Q(end_datetime__isnull=False),
+                name='event_facility_requires_end_datetime',
+            ),
+        ]
 
     def __str__(self):
         return self.title
 
+    def save(self, *args, **kwargs):
+        from django.utils.text import slugify
+        if not self.slug:
+            self.slug = slugify(self.title)[:255]
+        super().save(*args, **kwargs)
+
+    def clean(self):
+        """Validar reglas de negocio del evento."""
+        from django.core.exceptions import ValidationError
+        super().clean()
+
+        # Validar que eventos con facility tengan end_datetime
+        if self.facility and not self.end_datetime:
+            raise ValidationError({
+                'end_datetime': 'Los eventos que usan una instalación deben tener hora de fin definida.'
+            })
+
+        # Validar que end_datetime > start_datetime
+        if self.end_datetime and self.end_datetime <= self.start_datetime:
+            raise ValidationError({
+                'end_datetime': 'La fecha/hora de fin debe ser posterior al inicio.'
+            })
+
+        # Validar conflictos de facility (solo para eventos confirmados/programados)
+        if self.facility and self.end_datetime and self.status in [self.Status.PENDING, self.Status.SCHEDULED]:
+            # Buscar eventos que se solapen en la misma facility
+            overlap_qs = Event.objects.filter(
+                facility=self.facility,
+                status__in=[self.Status.PENDING, self.Status.SCHEDULED],
+                start_datetime__lt=self.end_datetime,
+                end_datetime__gt=self.start_datetime
+            ).exclude(pk=self.pk)
+
+            if overlap_qs.exists():
+                conflicting = overlap_qs.first()
+                raise ValidationError({
+                    'facility': f'La instalación ya está reservada por "{conflicting.title}" en ese horario.'
+                })
+
     @property
     def has_capacity_limit(self):
         return self.capacity is not None
+
+    @property
+    def duration(self):
+        """Calcula la duración del evento en segundos."""
+        if not self.end_datetime:
+            return None
+        delta = self.end_datetime - self.start_datetime
+        return int(delta.total_seconds())
+
+    @property
+    def is_multi_day(self):
+        """Retorna True si el evento dura más de un día."""
+        if not self.end_datetime:
+            return False
+        return self.end_datetime.date() > self.start_datetime.date()
+
+    @property
+    def is_recurring(self):
+        """Retorna True si el evento tiene recurrencia."""
+        return self.recurrence_type != self.RecurrenceType.NONE
+
+    @property
+    def confirmed_registrations_count(self):
+        """Número de inscripciones confirmadas."""
+        return self.registrations.filter(status=EventRegistration.Status.CONFIRMED).count()
+
+    @property
+    def available_spots(self):
+        """Cupos disponibles (None si no hay límite)."""
+        if not self.capacity:
+            return None
+        return max(0, self.capacity - self.confirmed_registrations_count)
+
+    @property
+    def is_full(self):
+        """True si el evento está lleno."""
+        if not self.capacity:
+            return False
+        return self.confirmed_registrations_count >= self.capacity
+
+    @property
+    def registration_is_open(self):
+        """True si las inscripciones están abiertas."""
+        if not self.requires_registration:
+            return False
+        if self.is_full:
+            return False
+        if self.registration_deadline and timezone.now() > self.registration_deadline:
+            return False
+        return True
+
+    @property
+    def confirmed_registrations_count(self):
+        """Número de inscripciones confirmadas."""
+        return self.registrations.filter(status='confirmed').count()
+
+    @property
+    def available_spots(self):
+        """Cupos disponibles (None si no hay límite)."""
+        if not self.capacity:
+            return None
+        return max(0, self.capacity - self.confirmed_registrations_count)
+
+    @property
+    def is_full(self):
+        """True si el evento está lleno."""
+        if not self.capacity:
+            return False
+        return self.confirmed_registrations_count >= self.capacity
+
+    @property
+    def registration_is_open(self):
+        """True si las inscripciones están abiertas."""
+        if not self.requires_registration:
+            return False
+        if self.is_full:
+            return False
+        if self.registration_deadline and timezone.now() > self.registration_deadline:
+            return False
+        return True
+
+
+class EventRegistration(models.Model):
+    """Inscripción de un usuario a un evento."""
+
+    class Status(models.TextChoices):
+        PENDING = ('pending', 'Pendiente de confirmación')
+        CONFIRMED = ('confirmed', 'Confirmada')
+        CANCELLED = ('cancelled', 'Cancelada')
+        WAITLIST = ('waitlist', 'Lista de espera')
+
+    tenant = models.ForeignKey(
+        'Tenant',
+        on_delete=models.CASCADE,
+        related_name='event_registrations',
+        null=True,
+        blank=True,
+    )
+    event = models.ForeignKey(
+        Event,
+        on_delete=models.CASCADE,
+        related_name='registrations',
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='event_registrations',
+        help_text='Usuario inscrito al evento'
+    )
+
+    # Datos adicionales del participante (opcional, para futuro)
+    participant_name = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text='Nombre del participante (si difiere del usuario)'
+    )
+    participant_email = models.EmailField(
+        blank=True,
+        help_text='Email de contacto del participante'
+    )
+    participant_phone = models.CharField(
+        max_length=20,
+        blank=True,
+        help_text='Teléfono de contacto'
+    )
+
+    # Estado y metadata
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.PENDING,
+    )
+    notes = models.TextField(
+        blank=True,
+        help_text='Notas adicionales o comentarios'
+    )
+
+    # Campos para futuro (pagos)
+    amount_due = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        help_text='Monto a pagar (0 = gratuito) - preparado para futuro'
+    )
+
+    # Tracking
+    registered_at = models.DateTimeField(auto_now_add=True)
+    confirmed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='Fecha de confirmación'
+    )
+    confirmed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='confirmed_registrations',
+        help_text='Usuario que confirmó la inscripción (si fue manual)'
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-registered_at']
+        verbose_name = 'Event Registration'
+        verbose_name_plural = 'Event Registrations'
+        unique_together = ('event', 'user')  # Un usuario no puede inscribirse dos veces
+        indexes = [
+            models.Index(fields=['event', 'status']),
+            models.Index(fields=['user', 'status']),
+        ]
+
+    def __str__(self):
+        return f'{self.user.email} - {self.event.title} ({self.get_status_display()})'
+
+    def clean(self):
+        """Validar reglas de negocio de inscripción."""
+        from django.core.exceptions import ValidationError
+        super().clean()
+
+        # Validar que el evento requiera inscripción
+        if not self.event.requires_registration:
+            raise ValidationError('Este evento no requiere inscripción.')
+
+        # Validar que las inscripciones estén abiertas
+        if not self.event.registration_is_open and not self.pk:
+            if self.event.is_full:
+                raise ValidationError('El evento está lleno.')
+            if self.event.registration_deadline and timezone.now() > self.event.registration_deadline:
+                raise ValidationError('El plazo de inscripción ha terminado.')
+
+        # Validar members_only
+        if self.event.members_only and not self.user.is_member:
+            raise ValidationError('Este evento es solo para miembros.')
+
+    def save(self, *args, **kwargs):
+        # Auto-confirmar si el evento lo permite
+        if not self.pk and self.event.auto_confirm_registration:
+            if not self.event.is_full:
+                self.status = self.Status.CONFIRMED
+                self.confirmed_at = timezone.now()
+            else:
+                # Si está lleno, ir a lista de espera
+                self.status = self.Status.WAITLIST
+
+        # Copiar monto del evento si no está definido
+        if not self.amount_due and self.event.has_cost:
+            self.amount_due = self.event.cost_amount
+
+        super().save(*args, **kwargs)
+
+    def confirm(self, confirmed_by=None):
+        """Confirmar la inscripción manualmente."""
+        if self.event.is_full and self.status != self.Status.CONFIRMED:
+            raise ValidationError('El evento está lleno, no se puede confirmar.')
+
+        self.status = self.Status.CONFIRMED
+        self.confirmed_at = timezone.now()
+        self.confirmed_by = confirmed_by
+        self.save(update_fields=['status', 'confirmed_at', 'confirmed_by', 'updated_at'])
+
+    def cancel(self, reason=''):
+        """Cancelar la inscripción."""
+        self.status = self.Status.CANCELLED
+        if reason:
+            self.notes = f'{self.notes}\nCancelado: {reason}' if self.notes else f'Cancelado: {reason}'
+        self.save(update_fields=['status', 'notes', 'updated_at'])
 
 
 class Booking(models.Model):
