@@ -10,7 +10,7 @@ from rest_framework.pagination import PageNumberPagination
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 
 from core.models import News
-from .serializers import NewsSerializer, NewsDetailSerializer
+from .serializers import NewsImageSerializer, NewsSerializer, NewsDetailSerializer
 
 
 class NewsPagination(PageNumberPagination):
@@ -112,6 +112,9 @@ class NewsViewSet(viewsets.ModelViewSet):
         """Usar serializer detallado para retrieve."""
         if self.action in ('retrieve',):
             return NewsDetailSerializer
+        elif self.action == 'upload_image':
+            return NewsImageSerializer
+
         return NewsSerializer
 
     @extend_schema(
@@ -140,6 +143,29 @@ class NewsViewSet(viewsets.ModelViewSet):
         description='Publicar una noticia (cambiar status a published)',
         request=None,
     )
+
+    @action(detail=True, methods=['post'], url_path='upload-image')
+    def upload_image(self, request, pk=None):
+        """Subir imagen de portada a noticia."""
+        news = self.get_object()
+        serializer = self.get_serializer(
+            news,
+            data=request.data,
+            partial=True
+        )
+
+        if serializer.is_valid():
+            serializer.save()
+            return Response(
+                serializer.data,
+                status=status.HTTP_200_OK
+            )
+
+        return Response(
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
     @action(detail=True, methods=['post'])
     def publish(self, request, pk=None):
         """Publicar una noticia."""

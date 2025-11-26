@@ -12,6 +12,10 @@ from rest_framework.test import APIClient
 from core.models import News, Tenant, Category
 
 from news.serializers import NewsSerializer, NewsDetailSerializer
+import tempfile
+import os
+
+from PIL import Image
 
 
 NEWS_URL = reverse('news:news-list')
@@ -66,6 +70,9 @@ def create_tenant(**params):
     )
     return tenant
 
+def image_upload_url(news_id):
+    """Retornar URL para subir imagen de portada a noticia."""
+    return reverse('news:news-upload-image', args=[news_id])
 
 def create_news(user, tenant, **params):
     """Crear y retornar una noticia de prueba."""
@@ -267,3 +274,41 @@ class PrivateNewsApiTests(TestCase):
 
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         self.assertEqual(len(res.data['results']), 2)
+
+class ImageUploadTests(TestCase):
+    """Pruebas para la subida de imágenes de portada a noticias."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.tenant = create_tenant()
+        self.user = create_user(tenant=self.tenant)
+        self.client.force_authenticate(user=self.user)
+        self.news = create_news(self.user, self.tenant)
+
+    def tearDown(self):
+        """Eliminar imagen de portada si existe."""
+        self.news.image.delete()
+
+    def test_upload_image(self):
+        """Prueba subir imagen de portada a noticia."""
+        url = image_upload_url(self.news.id)
+
+        with tempfile.NamedTemporaryFile(suffix='.jpg') as temp_image:
+            img = Image.new('RGB', (10, 10))
+            img.save(temp_image, format='JPEG')
+            temp_image.seek(0)
+            payload = {'image': temp_image}
+            res = self.client.post(url, payload, format='multipart')
+
+        self.news.refresh_from_db()
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertIn('image', res.data)
+        self.assertTrue(os.path.isfile(self.news.image.path))
+
+    def test_upload_image_bad_request(self):
+        """Prueba subir imagen inválida."""
+        url = image_upload_url(self.news.id)
+        payload = {'image': 'notanimage'}
+        res = self.client.post(url, payload, format='multipart')
+
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)

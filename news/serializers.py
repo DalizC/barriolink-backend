@@ -43,6 +43,7 @@ class NewsSerializer(serializers.ModelSerializer):
             'content',
             'summary',
             'link',
+            'image',
             'cover_image',
             'status',
             'categories',
@@ -87,3 +88,14 @@ class NewsDetailSerializer(NewsSerializer):
             'published_by_name',
             'archived_by_name',
         ]
+
+class NewsImageSerializer(serializers.ModelSerializer):
+    """Serializer para subir imagen de portada a noticia."""
+
+    class Meta:
+        model = News
+        fields = ['id', 'image']
+        read_only_fields = ['id']
+        extra_kwargs = {
+            'image': {'required': True},
+        }

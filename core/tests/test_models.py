@@ -1,6 +1,7 @@
 """
 Tests para Models.
 """
+from unittest.mock import patch
 from decimal import Decimal
 from datetime import timedelta
 
@@ -98,3 +99,12 @@ class ModelTests(TestCase):
         user = create_user()
         tag = models.Tag.objects.create(user=user, name='Tag1')
         self.assertEqual(str(tag), tag.name)'''
+
+    @patch('core.models.uuid.uuid4')
+    def test_news_file_name_uuid(self, mock_uuid):
+        """Test generar ruta de archivo de noticia con UUID."""
+        uuid = 'test-uuid'
+        mock_uuid.return_value = uuid
+        file_path = models.news_file_path(None, 'example.jpg')
+        expected_path = f'uploads/news/{uuid}.jpg'
+        self.assertEqual(file_path, expected_path)

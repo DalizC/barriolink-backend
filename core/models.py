@@ -1,6 +1,9 @@
 """
 Modelos de la base datos.
 """
+import uuid
+import os
+
 from django.conf import settings
 from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
@@ -10,6 +13,13 @@ from django.utils import timezone
 
 from .validators import validate_national_id_format
 
+
+def news_image_file_path(instance, filename):
+    """Generar ruta de archivo para imagen de noticia con UUID."""
+    ext = os.path.splitext(filename)[1]
+    filename = f'{uuid.uuid4()}{ext}'
+
+    return os.path.join('uploads','news', filename)
 
 class Tenant(models.Model):
     """Modelo de Barrio/Comunidad (organización multi-tenant)."""
@@ -775,6 +785,7 @@ class News(models.Model):
     summary = models.CharField(max_length=300, blank=True)  # TODO: Generar el resumen automáticamente
 
     link = models.URLField(blank=True)  # TODO: Será necesario?
+    image = models.ImageField(upload_to=news_image_file_path, blank=True, null=True)
     cover_image = models.URLField(blank=True)  # TODO: Cambiar de URLField a ImageField o FileField. post-MVP
 
     # Estado
