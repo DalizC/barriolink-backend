@@ -10,7 +10,7 @@ from rest_framework.pagination import PageNumberPagination
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 
 from core.models import Event
-from .serializers import EventSerializer
+from .serializers import EventSerializer, EventImageSerializer
 
 
 class EventPagination(PageNumberPagination):
@@ -59,6 +59,12 @@ class EventViewSet(viewsets.ModelViewSet):
     authentication_classes = [TokenAuthentication]
     permission_classes = [IsAuthorOrReadOnly]
     pagination_class = EventPagination
+
+    def get_serializer_class(self):
+        """Usar serializer específico para upload de imagen."""
+        if self.action == 'upload_image':
+            return EventImageSerializer
+        return EventSerializer
 
     def get_queryset(self):
         """Obtener queryset filtrado según parámetros."""
@@ -149,6 +155,28 @@ class EventViewSet(viewsets.ModelViewSet):
     def list(self, request, *args, **kwargs):
         """Listar eventos con filtros opcionales."""
         return super().list(request, *args, **kwargs)
+
+    @action(detail=True, methods=['post'], url_path='upload-image')
+    def upload_image(self, request, pk=None):
+        """Subir imagen de portada a evento."""
+        event = self.get_object()
+        serializer = self.get_serializer(
+            event,
+            data=request.data,
+            partial=True
+        )
+
+        if serializer.is_valid():
+            serializer.save()
+            return Response(
+                serializer.data,
+                status=status.HTTP_200_OK
+            )
+
+        return Response(
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST
+        )
 
     def perform_create(self, serializer):
         """Crear evento asignando autor y tenant."""

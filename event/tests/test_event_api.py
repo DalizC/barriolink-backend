@@ -15,6 +15,11 @@ from core.models import Event
 
 from event.serializers import EventSerializer
 
+import tempfile
+import os
+
+from PIL import Image
+
 
 EVENTS_URL = reverse('event:event-list')
 
@@ -106,6 +111,10 @@ class PrivateEventApiTests(TestCase):
 
         serializer = EventSerializer(event)
         self.assertEqual(res.data, serializer.data)
+
+    def image_upload_url(event_id):
+        """Retornar URL para subir imagen de portada a evento."""
+        return reverse('event:event-upload-image', args=[event_id])
 
     def test_create_event(self):
         """Prueba crear un nuevo evento."""
@@ -265,3 +274,50 @@ class PrivateEventApiTests(TestCase):
         res = self.client.post(EVENTS_URL, payload)
 
         self.assertEqual(res.status_code, status.HTTP_403_FORBIDDEN)
+
+class ImageUploadTests(TestCase):
+    """Pruebas para la subida de imágenes de portada a eventos."""
+
+    @staticmethod
+    def image_upload_url(event_id):
+        """Crear y retornar la URL de subida de imagen."""
+        return reverse('event:event-upload-image', args=[event_id])
+
+    def setUp(self):
+        self.client = APIClient()
+        self.user = get_user_model().objects.create_user(
+            'user@example.com',
+            'testpass',
+            role=get_user_model().Role.MEMBER,
+        )
+        self.client.force_authenticate(user=self.user)
+        self.event = create_event(self.user)
+
+    def tearDown(self):
+        """Eliminar imagen de portada si existe."""
+        if self.event.image:
+            self.event.image.delete()
+
+    def test_upload_image(self):
+        """Prueba subir imagen de portada a evento."""
+        url = self.image_upload_url(self.event.id)
+
+        with tempfile.NamedTemporaryFile(suffix='.jpg') as temp_image:
+            img = Image.new('RGB', (10, 10))
+            img.save(temp_image, format='JPEG')
+            temp_image.seek(0)
+            payload = {'image': temp_image}
+            res = self.client.post(url, payload, format='multipart')
+
+        self.event.refresh_from_db()
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertIn('image', res.data)
+        self.assertTrue(os.path.isfile(self.event.image.path))
+
+    def test_upload_image_bad_request(self):
+        """Prueba subir imagen inválida."""
+        url = self.image_upload_url(self.event.id)
+        payload = {'image': 'notanimage'}
+        res = self.client.post(url, payload, format='multipart')
+
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)

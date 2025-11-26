@@ -21,6 +21,13 @@ def news_image_file_path(instance, filename):
 
     return os.path.join('uploads','news', filename)
 
+def event_image_file_path(instance, filename):
+    """Generar ruta de archivo para imagen de noticia con UUID."""
+    ext = os.path.splitext(filename)[1]
+    filename = f'{uuid.uuid4()}{ext}'
+
+    return os.path.join('uploads','events', filename)
+
 class Tenant(models.Model):
     """Modelo de Barrio/Comunidad (organización multi-tenant)."""
     name = models.CharField(max_length=255, help_text='Nombre del barrio o junta de vecinos')
@@ -268,6 +275,7 @@ class Event(models.Model):
     title = models.CharField(max_length=255)
     slug = models.SlugField(max_length=255, blank=True, help_text='Slug autogenerado a partir del título')
     description = models.TextField(blank=True)
+    image = models.ImageField(upload_to=event_image_file_path, blank=True, null=True, help_text='Imagen representativa del evento')
     status = models.CharField(
         max_length=20,
         choices=Status.choices,

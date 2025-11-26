@@ -54,6 +54,7 @@ class EventSerializer(serializers.ModelSerializer):
             'title',
             'slug',
             'description',
+            'image',
             'status',
             'is_active',
             'is_public',
@@ -142,3 +143,15 @@ class EventSerializer(serializers.ModelSerializer):
                     })
 
         return data
+
+
+class EventImageSerializer(serializers.ModelSerializer):
+    """Serializer para subir imagen de portada a evento."""
+
+    class Meta:
+        model = Event
+        fields = ['id', 'image']
+        read_only_fields = ['id']
+        extra_kwargs = {
+            'image': {'required': True},
+        }
