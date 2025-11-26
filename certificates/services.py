@@ -64,7 +64,16 @@ def _fallback_html(ctx: dict) -> str:
 
 
 def send_certificate_email(certificate, to_email: str):
-    """Enviar el certificado por correo generándolo en memoria (sin guardar)."""
+    """Enviar el certificado por correo generándolo en memoria (sin guardar).
+    
+    TODO: Para que los emails se envíen realmente en producción, configurar en .env:
+    - EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
+    - EMAIL_HOST, EMAIL_PORT, EMAIL_USE_TLS
+    - EMAIL_HOST_USER, EMAIL_HOST_PASSWORD
+    - DEFAULT_FROM_EMAIL
+    
+    Actualmente usa console.EmailBackend por defecto (solo imprime en consola).
+    """
     from django.utils import timezone
 
     pdf_bytes, file_name = generate_certificate_pdf_bytes(certificate)

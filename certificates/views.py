@@ -9,9 +9,15 @@ from rest_framework.response import Response
 from rest_framework.renderers import BaseRenderer
 from drf_spectacular.utils import extend_schema, OpenApiResponse
 from drf_spectacular.types import OpenApiTypes
+from django.utils import timezone
 
 from core.models import Certificate
-from .serializers import CertificateSerializer, CertificateDetailSerializer
+from .serializers import (
+    CertificateSerializer,
+    CertificateDetailSerializer,
+    CertificateRequestSerializer,
+    CertificateResponseSerializer
+)
 from .services import generate_certificate_pdf_bytes, send_certificate_email
 
 
@@ -108,3 +114,55 @@ class CertificateViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
         return Response({'detail': 'Correo enviado.'})
+
+    @extend_schema(
+        request=CertificateRequestSerializer,
+        responses={201: CertificateResponseSerializer}
+    )
+    @action(detail=False, methods=['post'], url_path='request')
+    def request_certificate(self, request):
+        """Solicitar y crear un certificado de residencia.
+
+        Crea el certificado en la base de datos y opcionalmente lo envía por email.
+        Retorna el ID del certificado creado y la URL para descargarlo.
+        """
+        serializer = CertificateRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        data = serializer.validated_data
+        user = request.user
+
+        # Crear el certificado en la base de datos
+        certificate = Certificate.objects.create(
+            user=user,
+            tenant=user.tenant,
+            title='Certificado de Residencia',
+            description=f"Certificado de residencia emitido para {data['full_name']}\nDirección: {data['address']}\nEmail de contacto: {data['email']}",
+            issued_at=timezone.now().date(),
+            status=Certificate.Status.ACTIVE,
+        )
+
+        # Intentar enviar por email si se solicitó
+        email_sent = False
+        if data.get('send_email', False):
+            try:
+                send_certificate_email(certificate, data['email'])
+                email_sent = True
+            except Exception as exc:
+                # No fallar la creación si el email falla, solo registrar
+                pass
+
+        # Construir URL del PDF
+        pdf_url = request.build_absolute_uri(
+            f'/api/certificates/{certificate.id}/pdf/'
+        )
+
+        response_data = {
+            'success': True,
+            'message': 'Certificado creado exitosamente.',
+            'certificate_id': certificate.id,
+            'pdf_url': pdf_url,
+            'email_sent': email_sent,
+        }
+
+        return Response(response_data, status=status.HTTP_201_CREATED)

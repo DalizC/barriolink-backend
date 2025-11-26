@@ -132,11 +132,22 @@ class NewsViewSet(viewsets.ModelViewSet):
         return super().list(request, *args, **kwargs)
 
     def perform_create(self, serializer):
-        """Crear noticia asignando autor y tenant."""
+        """Crear noticia asignando autor y tenant.
+
+        Solo los administradores pueden crear noticias con status 'published'.
+        Los usuarios no-admin siempre crean en estado 'draft'.
+        """
         tenant_id = self.request.user.tenant_id if self.request.user.tenant else 1
+
+        # Forzar draft si el usuario no es admin y está intentando publicar
+        status = serializer.validated_data.get('status', 'draft')
+        if status == 'published' and not self.request.user.is_admin:
+            status = 'draft'
+
         serializer.save(
             author=self.request.user,
             tenant_id=tenant_id,
+            status=status,
         )
 
     @extend_schema(
