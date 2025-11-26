@@ -20,11 +20,11 @@ class EventSerializer(serializers.ModelSerializer):
         source='tenant.id',
         read_only=True
     )
-    author_id = serializers.IntegerField(
+    organizer_id = serializers.IntegerField(
         source='user.id',
         read_only=True
     )
-    author_name = serializers.CharField(
+    organizer_name = serializers.CharField(
         source='user.name',
         read_only=True
     )
@@ -49,8 +49,8 @@ class EventSerializer(serializers.ModelSerializer):
         fields = [
             'id',
             'tenant_id',
-            'author_id',
-            'author_name',
+            'organizer_id',
+            'organizer_name',
             'title',
             'slug',
             'description',
@@ -84,8 +84,8 @@ class EventSerializer(serializers.ModelSerializer):
         read_only_fields = [
             'id',
             'tenant_id',
-            'author_id',
-            'author_name',
+            'organizer_id',
+            'organizer_name',
             'slug',
             'duration',
             'is_recurring',

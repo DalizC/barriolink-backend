@@ -94,10 +94,10 @@ class EventViewSet(viewsets.ModelViewSet):
         if facility_id:
             queryset = queryset.filter(facility_id=facility_id)
 
-        # Filtro por autor
-        author_id = self.request.query_params.get('author')
-        if author_id:
-            queryset = queryset.filter(user_id=author_id)
+        # Filtro por organizador
+        organizer_id = self.request.query_params.get('organizer')
+        if organizer_id:
+            queryset = queryset.filter(user_id=organizer_id)
 
         # Filtros por datetime de inicio (soporta fecha YYYY-MM-DD o datetime completo)
         start_from = self.request.query_params.get('start_from')

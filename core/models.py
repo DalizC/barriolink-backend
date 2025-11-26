@@ -232,11 +232,16 @@ class Event(models.Model):
 
     class RecurrenceType(models.TextChoices):
         NONE = ('none', 'Evento único')
-        DAILY = ('daily', 'Diario')
+        DAILY = ('daily', 'Diaria')
         WEEKLY = ('weekly', 'Semanal')
-        BIWEEKLY = ('biweekly', 'Bisemanal')
         MONTHLY = ('monthly', 'Mensual')
-        CUSTOM = ('custom', 'Personalizado')
+        QUARTERLY = ('quarterly', 'Trimestral')
+        SEMESTRAL = ('semestral', 'Semestral')
+        YEARLY = ('yearly', 'Anual')
+
+    class MonthlyMode(models.TextChoices):
+        DAY_OF_WEEK = ('day_of_week', 'Mantener día de la semana')
+        DAY_OF_MONTH = ('day_of_month', 'Mantener fecha fija')
 
     tenant = models.ForeignKey(
         'Tenant',
@@ -293,6 +298,11 @@ class Event(models.Model):
         default=RecurrenceType.NONE,
         help_text='Tipo de recurrencia del evento'
     )
+    recurrence_count = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text='Número de ocurrencias por periodo (ej: 2 veces a la semana)'
+    )
     recurrence_end_date = models.DateField(
         null=True,
         blank=True,
@@ -300,12 +310,24 @@ class Event(models.Model):
     )
     recurrence_interval = models.IntegerField(
         default=1,
-        help_text='Intervalo de recurrencia (ej: cada 2 semanas para bisemanal)'
+        help_text='Intervalo de recurrencia (ej: cada 2 semanas)'
     )
     recurrence_days_of_week = models.CharField(
         max_length=20,
         blank=True,
         help_text='Días de la semana para recurrencia semanal (ej: "1,3,5" para L-M-V)'
+    )
+    recurrence_times = models.JSONField(
+        null=True,
+        blank=True,
+        help_text='Horarios individuales por ocurrencia: [{"day": 2, "start_time": "18:00", "end_time": "20:00"}, ...]'
+    )
+    recurrence_monthly_mode = models.CharField(
+        max_length=20,
+        choices=MonthlyMode.choices,
+        null=True,
+        blank=True,
+        help_text='Para recurrencia mensual: mantener día de la semana o fecha fija'
     )
 
     # Configuración de inscripciones
