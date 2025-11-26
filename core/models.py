@@ -416,6 +416,7 @@ class Event(models.Model):
     def clean(self):
         """Validar reglas de negocio del evento."""
         from django.core.exceptions import ValidationError
+        from datetime import datetime, timedelta, time
         super().clean()
 
         # Validar que eventos con facility tengan end_datetime
@@ -432,19 +433,162 @@ class Event(models.Model):
 
         # Validar conflictos de facility (solo para eventos confirmados/programados)
         if self.facility and self.end_datetime and self.status in [self.Status.PENDING, self.Status.SCHEDULED]:
-            # Buscar eventos que se solapen en la misma facility
-            overlap_qs = Event.objects.filter(
-                facility=self.facility,
-                status__in=[self.Status.PENDING, self.Status.SCHEDULED],
-                start_datetime__lt=self.end_datetime,
-                end_datetime__gt=self.start_datetime
-            ).exclude(pk=self.pk)
+            self._validate_facility_conflicts()
 
-            if overlap_qs.exists():
-                conflicting = overlap_qs.first()
-                raise ValidationError({
-                    'facility': f'La instalación ya está reservada por "{conflicting.title}" en ese horario.'
-                })
+    def _validate_facility_conflicts(self):
+        """Validar que no haya conflictos de horario en la facility."""
+        from django.core.exceptions import ValidationError
+        from datetime import datetime, timedelta, time
+
+        # Generar todas las ocurrencias del evento actual
+        my_occurrences = self._generate_occurrences_for_validation()
+
+        # Buscar eventos potencialmente conflictivos en la misma facility
+        # Rango amplio para capturar eventos periódicos
+        search_start = self.start_datetime.date()
+        search_end = self.recurrence_end_date if self.recurrence_end_date else (self.start_datetime + timedelta(days=365)).date()
+
+        conflicting_events = Event.objects.filter(
+            facility=self.facility,
+            status__in=[self.Status.PENDING, self.Status.SCHEDULED],
+            start_datetime__date__lte=search_end,
+        ).exclude(pk=self.pk)
+
+        # Para eventos periódicos, también filtrar por recurrence_end_date
+        from django.db.models import Q
+        conflicting_events = conflicting_events.filter(
+            Q(recurrence_type='none', start_datetime__date__gte=search_start) |
+            Q(recurrence_end_date__gte=search_start) |
+            Q(recurrence_end_date__isnull=True, start_datetime__date__lte=search_end)
+        )
+
+        # Verificar cada evento conflictivo
+        for other_event in conflicting_events:
+            other_occurrences = other_event._generate_occurrences_for_validation()
+
+            # Comparar cada par de ocurrencias
+            for my_occ in my_occurrences:
+                for other_occ in other_occurrences:
+                    # Verificar si las ocurrencias se solapan
+                    if self._check_overlap(my_occ, other_occ):
+                        raise ValidationError({
+                            'facility': f'Conflicto de horario con "{other_event.title}" el {other_occ["date"].strftime("%d/%m/%Y")} '
+                                       f'({other_occ["start_time"]} - {other_occ["end_time"]}). '
+                                       f'Tu evento: {my_occ["start_time"]} - {my_occ["end_time"]}.'
+                        })
+
+    def _generate_occurrences_for_validation(self, max_days=365):
+        """Generar lista de ocurrencias para validación de conflictos.
+
+        Returns:
+            List[dict]: Lista de ocurrencias con formato:
+                {
+                    'date': datetime.date,
+                    'start_time': 'HH:MM',
+                    'end_time': 'HH:MM',
+                    'start_datetime': datetime,
+                    'end_datetime': datetime
+                }
+        """
+        from datetime import datetime, timedelta, time
+        occurrences = []
+
+        # Evento único
+        if self.recurrence_type == self.RecurrenceType.NONE:
+            occurrences.append({
+                'date': self.start_datetime.date(),
+                'start_time': self.start_datetime.strftime('%H:%M'),
+                'end_time': self.end_datetime.strftime('%H:%M'),
+                'start_datetime': self.start_datetime,
+                'end_datetime': self.end_datetime
+            })
+            return occurrences
+
+        # Evento periódico con horarios específicos en recurrence_times
+        if self.recurrence_times:
+            current_date = self.start_datetime.date()
+            end_limit = self.recurrence_end_date if self.recurrence_end_date else (current_date + timedelta(days=max_days))
+
+            while current_date <= end_limit:
+                # Para eventos semanales, verificar si el día de la semana coincide
+                if self.recurrence_type == self.RecurrenceType.WEEKLY:
+                    weekday = current_date.weekday()
+                    # Buscar en recurrence_times si hay un horario para este día
+                    for rec_time in self.recurrence_times:
+                        if rec_time.get('day') == weekday:
+                            start_time_str = rec_time.get('start_time', '00:00')
+                            end_time_str = rec_time.get('end_time', '23:59')
+
+                            # Parsear horarios
+                            start_hour, start_min = map(int, start_time_str.split(':'))
+                            end_hour, end_min = map(int, end_time_str.split(':'))
+
+                            start_dt = datetime.combine(current_date, time(start_hour, start_min))
+                            end_dt = datetime.combine(current_date, time(end_hour, end_min))
+
+                            occurrences.append({
+                                'date': current_date,
+                                'start_time': start_time_str,
+                                'end_time': end_time_str,
+                                'start_datetime': start_dt,
+                                'end_datetime': end_dt
+                            })
+
+                current_date += timedelta(days=1)
+
+        # Evento periódico sin horarios específicos (usar start_datetime y end_datetime base)
+        else:
+            current_date = self.start_datetime.date()
+            end_limit = self.recurrence_end_date if self.recurrence_end_date else (current_date + timedelta(days=max_days))
+            base_start_time = self.start_datetime.time()
+            base_end_time = self.end_datetime.time()
+
+            while current_date <= end_limit:
+                # Aplicar lógica de recurrencia
+                if self.recurrence_type == self.RecurrenceType.DAILY:
+                    should_include = True
+                elif self.recurrence_type == self.RecurrenceType.WEEKLY:
+                    # Verificar días de la semana
+                    if self.recurrence_days_of_week:
+                        weekdays = [int(d) for d in self.recurrence_days_of_week.split(',')]
+                        should_include = current_date.weekday() in weekdays
+                    else:
+                        should_include = current_date.weekday() == self.start_datetime.weekday()
+                else:
+                    should_include = True
+
+                if should_include:
+                    start_dt = datetime.combine(current_date, base_start_time)
+                    end_dt = datetime.combine(current_date, base_end_time)
+
+                    occurrences.append({
+                        'date': current_date,
+                        'start_time': base_start_time.strftime('%H:%M'),
+                        'end_time': base_end_time.strftime('%H:%M'),
+                        'start_datetime': start_dt,
+                        'end_datetime': end_dt
+                    })
+
+                current_date += timedelta(days=1)
+
+        return occurrences
+
+    def _check_overlap(self, occ1, occ2):
+        """Verificar si dos ocurrencias se solapan en fecha y hora.
+
+        Args:
+            occ1, occ2: Diccionarios con 'date', 'start_datetime', 'end_datetime'
+
+        Returns:
+            bool: True si hay solapamiento
+        """
+        # Deben ser el mismo día
+        if occ1['date'] != occ2['date']:
+            return False
+
+        # Verificar solapamiento de horarios
+        return (occ1['start_datetime'] < occ2['end_datetime'] and
+                occ1['end_datetime'] > occ2['start_datetime'])
 
     @property
     def has_capacity_limit(self):

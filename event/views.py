@@ -105,6 +105,38 @@ class EventViewSet(viewsets.ModelViewSet):
         if organizer_id:
             queryset = queryset.filter(user_id=organizer_id)
 
+        # Filtro especial por rango de fechas (considera eventos periódicos)
+        start_date = self.request.query_params.get('start_date')
+        end_date = self.request.query_params.get('end_date')
+
+        if start_date or end_date:
+            from datetime import datetime, timedelta
+            from django.db.models import Q
+
+            # Parsear fechas
+            if start_date:
+                start_dt = datetime.strptime(start_date, '%Y-%m-%d').date()
+            if end_date:
+                end_dt = datetime.strptime(end_date, '%Y-%m-%d').date()
+            else:
+                end_dt = start_dt if start_date else None
+
+            if start_dt and end_dt:
+                # Filtro para eventos que se solapan con el rango de fechas
+                # Eventos únicos (none)
+                q_single = Q(recurrence_type='none') & (
+                    Q(start_datetime__date__lte=end_dt) &
+                    (Q(end_datetime__date__gte=start_dt) | Q(end_datetime__isnull=True))
+                )
+
+                # Eventos periódicos activos que podrían tener ocurrencias en el rango
+                q_recurring = Q(recurrence_type__in=['daily', 'weekly', 'monthly', 'quarterly', 'semestral', 'yearly']) & (
+                    Q(start_datetime__date__lte=end_dt) &
+                    (Q(recurrence_end_date__gte=start_dt) | Q(recurrence_end_date__isnull=True))
+                )
+
+                queryset = queryset.filter(q_single | q_recurring)
+
         # Filtros por datetime de inicio (soporta fecha YYYY-MM-DD o datetime completo)
         start_from = self.request.query_params.get('start_from')
         start_to = self.request.query_params.get('start_to')

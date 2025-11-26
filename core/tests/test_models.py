@@ -103,8 +103,9 @@ class ModelTests(TestCase):
     @patch('core.models.uuid.uuid4')
     def test_news_file_name_uuid(self, mock_uuid):
         """Test generar ruta de archivo de noticia con UUID."""
+        import os
         uuid = 'test-uuid'
         mock_uuid.return_value = uuid
-        file_path = models.news_file_path(None, 'example.jpg')
-        expected_path = f'uploads/news/{uuid}.jpg'
+        file_path = models.news_image_file_path(None, 'example.jpg')
+        expected_path = os.path.join('uploads', 'news', f'{uuid}.jpg')
         self.assertEqual(file_path, expected_path)
